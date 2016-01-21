@@ -340,6 +340,38 @@ class meanInferredAp {
         return l;
     }
 
+    public  HashMap<Integer, HashMap<String, Double>> loadCosineValue(String fileName) throws FileNotFoundException, IOException {
+        FileReader fr = new FileReader(new File(fileName));
+        BufferedReader br = new BufferedReader(fr);
+
+        String line = br.readLine();
+        HashMap<Integer, HashMap<String, Double>> qidCosineMap = new HashMap<>();
+        String qid = "401";
+        HashMap<String, Double> h1 = new HashMap<>();
+        int flag = 0;
+        while (line != null) {
+            if (line.startsWith("#")) {
+                if (flag != 0) {
+                    qidCosineMap.put(Integer.parseInt(qid), h1);
+                    h1 = new HashMap<>();
+                    qid = line.substring(1, line.length());
+                } else {
+                    qid = line.substring(1, line.length());
+                    flag = 1;
+                }
+            } else {
+
+                String st[] = line.split(" ");
+                String docPair = st[0] + st[1];
+                h1.put(docPair, Double.parseDouble(st[2]));
+
+            }
+
+            line = br.readLine();
+        }
+            return qidCosineMap;
+    }
+
     public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter, String runfileName) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
@@ -992,17 +1024,17 @@ public class Evaluator {
             //System.out.println(infAp.reldocList.irrelMap.size());
             //  System.out.println(infAp.reldocList.relMap.size());
 
-            while (it.hasNext()) {
-                String docid1 = (String) it.next();
-                //  System.out.println(docid1);
-                Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
-                while (it2.hasNext()) {
-                    String docid2 = (String) it2.next();
-                    bw.write(docid1 + " " + docid2 + " " + kde.computeCosineSimilarity(kde.getIndex(docid1, reader), kde.getIndex(docid2, reader), reader));
-                    bw.newLine();
-                }
+             while (it.hasNext()) {
+             String docid1 = (String) it.next();
+             //  System.out.println(docid1);
+             Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
+             while (it2.hasNext()) {
+             String docid2 = (String) it2.next();
+             bw.write(docid1 + " " + docid2 + " " + kde.computeCosineSimilarity(kde.getIndex(docid1, reader), kde.getIndex(docid2, reader), reader));
+             bw.newLine();
+             }
 
-            }
+             }
             it = infAp.reldocList.relMap.keySet().iterator();
             while (it.hasNext()) {
                 String docid1 = (String) it.next();
@@ -1101,7 +1133,7 @@ public class Evaluator {
 
             Evaluator evaluator = new Evaluator(qrelsFile, resFile);
             evaluator.load();
-            evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store.txt", reader);
+            evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store1.txt", reader);
             reader.close();
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
             // meanInAp.computeMeanInferredApKDE(prop, .30, 5);
