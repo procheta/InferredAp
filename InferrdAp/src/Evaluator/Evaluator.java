@@ -981,8 +981,8 @@ public class Evaluator {
             InferredAp infAp = new InferredAp(h.toString(), 5, runFileName, eval);
             KDEImplementation kde = new KDEImplementation();
             Iterator it = infAp.reldocList.irrelMap.keySet().iterator();
-            System.out.println(infAp.reldocList.irrelMap.size());
-            System.out.println(infAp.reldocList.relMap.size());
+            //System.out.println(infAp.reldocList.irrelMap.size());
+          //  System.out.println(infAp.reldocList.relMap.size());
            
             while (it.hasNext()) {
                 String docid1 = (String) it.next();
@@ -995,6 +995,19 @@ public class Evaluator {
                 }
 
             }
+            it = infAp.reldocList.relMap.keySet().iterator(); 
+            while (it.hasNext()) {
+                String docid1 = (String) it.next();
+               //  System.out.println(docid1);
+                Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
+                while (it2.hasNext()) {
+                    String docid2 = (String) it2.next();
+                    bw.write(docid1 + " " + docid2 + " " + kde.computeCosineSimilarity(kde.getIndex(docid1, reader), kde.getIndex(docid2, reader), reader));
+                    bw.newLine();
+                }
+
+            }
+            
 
            // reader.close();
         }
