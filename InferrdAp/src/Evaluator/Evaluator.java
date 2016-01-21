@@ -340,15 +340,15 @@ class meanInferredAp {
         return l;
     }
 
-    public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter) throws Exception {
+    public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter, String runfileName) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
         String runFileLocation = prop.getProperty("runFileLocation");
         AllRunRetrievedResults alr = new AllRunRetrievedResults(prop.getProperty("run.file"), runFileLocation);
         eval.load();
-        eval.retRcds = alr.allRunRetMap.get("input.kdd8sh16");
+        eval.retRcds = alr.allRunRetMap.get(runfileName);
         HashMap<String, HashMap<String, Double>> kdeMap = new HashMap<String, HashMap<String, Double>>();
-        eval.retRcds.resFile = runFileLocation + "/input.kdd8sh16";
+        eval.retRcds.resFile = runFileLocation + "/" + runfileName;
         HashMap<Integer, HashSet> sampleDataMap = new HashMap<>();
         HashMap<Integer, HashSet> relDocMap = new HashMap<>();
         HashMap<String, HashMap<String, Double>> cosineMap = new HashMap<>();
@@ -356,8 +356,7 @@ class meanInferredAp {
         for (int i = startQrelno; i <= endQrelno; i++) {
             double sum = 0;
             Integer h = i;
-
-            InferredAp iAp = new InferredAp(h.toString(), maxIter, "input.kdd8sh16", eval);
+            InferredAp iAp = new InferredAp(h.toString(), maxIter, runfileName, eval);
             iAp.sampling(percentage);
             iAp.processRetrievedResult();
             KDEImplementation kde = new KDEImplementation();
@@ -373,7 +372,7 @@ class meanInferredAp {
             double sum = 0;
             Integer h = i;
 
-            InferredAp iAp = new InferredAp(h.toString(), maxIter, "input.kdd8sh16", eval);
+            InferredAp iAp = new InferredAp(h.toString(), maxIter, runfileName, eval);
             iAp.sampledData = sampleDataMap.get(h);
             iAp.reldoc = relDocMap.get(h);
             iAp.processRetrievedResult();
@@ -600,8 +599,6 @@ class ActualAp {
 
     }
 
-   
-   
     public HashMap<String, Double> computeMeanActualAp(Properties prop, int startQid, int endQid, ArrayList runFileList) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
@@ -617,9 +614,9 @@ class ActualAp {
 
                 Integer h = i;
                 ActualAp ap = new ActualAp(h.toString(), eval);
-  ap.processRetrievedResult();
+                ap.processRetrievedResult();
                 sum += ap.computeActualAp();
-             }
+            }
 
             sum /= runFileList.size();
             meanActualApMap.put((String) runFileList.get(j), sum);//*/
@@ -823,7 +820,18 @@ class InferredAp {
 
                 // sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
                 //    / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
-                sum += (1 / (double) (i + 1)) + (1 / (double) (i + 1)) * KDEValues.get(retriveList.rtuples.get(i).docName);
+                sum += (1 / (double) (i + 1));
+                for (int j = 0; j < i; j++) {
+                    if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
+
+                        sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
+                    } else {
+                        if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
+
+                            sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1));
+                        }
+                    }
+                }
 
                 numberofRecords++;
 
@@ -969,7 +977,7 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
     }
 
-    public void storeCosineSimilarity(int startQRelno, int endQrelno, Evaluator eval, String runFileName,String filePath,IndexReader reader) throws Exception {
+    public void storeCosineSimilarity(int startQRelno, int endQrelno, Evaluator eval, String runFileName, String filePath, IndexReader reader) throws Exception {
         FileWriter fw = new FileWriter(new File(filePath));
         BufferedWriter bw = new BufferedWriter(fw);
 
@@ -982,11 +990,11 @@ public class Evaluator {
             KDEImplementation kde = new KDEImplementation();
             Iterator it = infAp.reldocList.irrelMap.keySet().iterator();
             //System.out.println(infAp.reldocList.irrelMap.size());
-          //  System.out.println(infAp.reldocList.relMap.size());
-           
+            //  System.out.println(infAp.reldocList.relMap.size());
+
             while (it.hasNext()) {
                 String docid1 = (String) it.next();
-               //  System.out.println(docid1);
+                //  System.out.println(docid1);
                 Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
                 while (it2.hasNext()) {
                     String docid2 = (String) it2.next();
@@ -995,10 +1003,10 @@ public class Evaluator {
                 }
 
             }
-            it = infAp.reldocList.relMap.keySet().iterator(); 
+            it = infAp.reldocList.relMap.keySet().iterator();
             while (it.hasNext()) {
                 String docid1 = (String) it.next();
-               //  System.out.println(docid1);
+                //  System.out.println(docid1);
                 Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
                 while (it2.hasNext()) {
                     String docid2 = (String) it2.next();
@@ -1007,9 +1015,8 @@ public class Evaluator {
                 }
 
             }
-            
 
-           // reader.close();
+            // reader.close();
         }
         bw.close();
     }
@@ -1094,10 +1101,10 @@ public class Evaluator {
 
             Evaluator evaluator = new Evaluator(qrelsFile, resFile);
             evaluator.load();
-            evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16","/home/procheta/Documents/Store.txt",reader);
-             reader.close();
+            evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store.txt", reader);
+            reader.close();
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-            // meanInAp.computeMeanInferredApKDE(prop, 30, 5);
+            // meanInAp.computeMeanInferredApKDE(prop, .30, 5);
 
         } catch (Exception ex) {
             ex.printStackTrace();
