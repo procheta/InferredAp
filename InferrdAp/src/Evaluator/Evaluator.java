@@ -976,14 +976,17 @@ public class Evaluator {
         for (int i = startQRelno; i < endQrelno; i++) {
             Integer h = i;
             bw.write("#" + h.toString());
+            System.out.println("#" + h.toString());
             bw.newLine();
             InferredAp infAp = new InferredAp(h.toString(), 5, runFileName, eval);
             KDEImplementation kde = new KDEImplementation();
             Iterator it = infAp.reldocList.irrelMap.keySet().iterator();
             System.out.println(infAp.reldocList.irrelMap.size());
             System.out.println(infAp.reldocList.relMap.size());
+           
             while (it.hasNext()) {
                 String docid1 = (String) it.next();
+               //  System.out.println(docid1);
                 Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
                 while (it2.hasNext()) {
                     String docid2 = (String) it2.next();
@@ -993,7 +996,7 @@ public class Evaluator {
 
             }
 
-            reader.close();
+           // reader.close();
         }
         bw.close();
     }
