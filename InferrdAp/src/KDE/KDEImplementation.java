@@ -175,24 +175,43 @@ public class KDEImplementation {
         
         return index;
     }
-
-    public HashMap<String, Double> calculateKde(HashSet judgedRel, ArrayList<String> unjudged, IndexReader reader) throws IOException {
+    
+    
+    public HashMap<String, Double> calculateKde(Set judgedRel, ArrayList<String> unjudged, IndexReader reader,int qid,HashMap<Integer, HashMap<String, Double>> h1, HashMap<Integer, HashMap<String, Double>> h2 ) throws IOException {
         Iterator it = unjudged.iterator();
         HashMap<String, Double> estmatedList = new HashMap<String, Double>();
         double score = 0;
+        //HashMap<Integer, HashMap<String, Double>> h1 = loadCosineValue("/home/procheta/Documents/Store.txt");
+        //HashMap<Integer, HashMap<String, Double>> h2 = loadCosineValue("/home/procheta/Documents/Store1.txt");
+        HashMap<String,Double> h3 = h1.get(qid);
+         HashMap<String,Double> h4 = h2.get(qid);
+        //System.out.println("h4 "+h4);
         for (int i = 0; i < unjudged.size(); i++) {
             String docid = unjudged.get(i);
             //  System.out.println(docid);
             Iterator it2 = judgedRel.iterator();
             score = 0;
-           
+             String docidair="";
+            double sim;
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
                 try {
-                    double sim = computeCosineSimilarity(getIndex(docid, reader), getIndex(docid2, reader),reader);
+                    docidair = docid+docid2;
+                  
+                   // double sim = computeCosineSimilarity(getIndex(docid, reader), getIndex(docid2, reader),reader);
+                  if(h3.containsKey(docidair))
+                  {    sim = h3.get(docidair);
+                     // System.out.println("jjjj");
+                  }
+                  else
+                      sim = h4.get(docidair);
                     score += Math.exp(((1 - sim) * (1 - sim)) / 2);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                   // e.printStackTrace();
+                    sim = 0;
+                     score += Math.exp(((1 - sim) * (1 - sim)) / 2);
+                    // System.out.println("docidPair  "+docidair);
+                   // System.out.println(qid);
                 }
             }
             score = score / judgedRel.size();
