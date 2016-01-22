@@ -31,6 +31,7 @@ import java.util.Vector;
 import org.apache.commons.math3.stat.correlation.KendallsCorrelation;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.store.FSDirectory;
 
 /**
@@ -66,6 +67,44 @@ class PerQueryRelDocs {
             irrelMap.put(docId, rel);
             pool.add(docId);
         }
+    }
+
+    public HashMap<String, Double> precomputeCosineSim(String indexPath) throws IOException, ParseException {
+
+        HashMap<String, Double> perQuerydocCosineSim = new HashMap<>();
+
+        Iterator it = irrelMap.keySet().iterator();
+        //System.out.println(infAp.reldocList.irrelMap.size());
+        //  System.out.println(infAp.reldocList.relMap.size());
+
+        while (it.hasNext()) {
+            String docid1 = (String) it.next();
+            //  System.out.println(docid1);
+            DocVector doc1 = new DocVector(docid1, indexPath);
+            Iterator it2 = relMap.keySet().iterator();
+            while (it2.hasNext()) {
+                String docid2 = (String) it2.next();
+                DocVector doc2 = new DocVector(docid2, indexPath);
+                perQuerydocCosineSim.put(docid1 + "#" + docid2, doc1.computeCosineSimilarity(doc2));
+
+            }
+
+        }
+        it = relMap.keySet().iterator();
+        while (it.hasNext()) {
+            String docid1 = (String) it.next();
+            //  System.out.println(docid1);
+            DocVector doc1 = new DocVector(docid1, indexPath);
+            Iterator it2 = relMap.keySet().iterator();
+            while (it2.hasNext()) {
+                String docid2 = (String) it2.next();
+                DocVector doc2 = new DocVector(docid2, indexPath);
+                perQuerydocCosineSim.put(docid1 + "#" + docid2, doc1.computeCosineSimilarity(doc2));
+            }
+        }
+
+        return perQuerydocCosineSim;
+
     }
 }
 
@@ -116,6 +155,67 @@ class AllRelRcds {
             perQueryRels.put(qid, relTuple);
         }
         relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]));
+    }
+
+    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo, String indexPath) throws IOException, ParseException {
+        FileWriter fw = new FileWriter(new File(fileName));
+        BufferedWriter bw = new BufferedWriter(fw);
+        for (int qid = startQrelNo; qid < endQrelNo; qid++) {
+
+            PerQueryRelDocs perqd = perQueryRels.get(qid);
+            HashMap<String, Double> cosinemap = perqd.precomputeCosineSim(indexPath);
+            Iterator it = cosinemap.keySet().iterator();
+            while (it.hasNext()) {
+                String docPair = (String) it.next();
+                String st[] = docPair.split("#");
+                bw.write(st[0] + " " + st[1] + " " + cosinemap.get(docPair));
+                bw.newLine();
+
+            }
+
+        }
+        bw.close();
+    }
+
+    public HashMap<Integer, HashMap<String, Double>> loadCosineValue(String fileName) throws FileNotFoundException, IOException {
+        FileReader fr = new FileReader(new File(fileName));
+        BufferedReader br = new BufferedReader(fr);
+
+        String line = br.readLine();
+        HashMap<Integer, HashMap<String, Double>> qidCosineMap = new HashMap<>();
+        String qid = "401";
+        HashMap<String, Double> h1 = new HashMap<>();
+        int flag = 0;
+        int flag2 = 0;
+        while (line != null) {
+            if (line.startsWith("#")) {
+                if (flag != 0) {
+                    qidCosineMap.put(Integer.parseInt(qid), h1);
+                    h1 = new HashMap<>();
+                    qid = line.substring(1, line.length());
+                } else {
+                    qid = line.substring(1, line.length());
+                    flag = 1;
+                }
+                if (qid.equals("421")) {
+                    flag2 = 1;
+                    break;
+                }
+                //   System.out.println(qid);
+            } else {
+
+                String st[] = line.split(" ");
+                String docPair = st[0] + st[1];
+                h1.put(docPair, Double.parseDouble(st[2]));
+
+            }
+            if (flag2 == 1) {
+                break;
+            }
+            line = br.readLine();
+            //System.out.println(line);
+        }
+        return qidCosineMap;
     }
 
     public String toString() {
@@ -340,47 +440,6 @@ class meanInferredAp {
         return l;
     }
 
-    public HashMap<Integer, HashMap<String, Double>> loadCosineValue(String fileName) throws FileNotFoundException, IOException {
-        FileReader fr = new FileReader(new File(fileName));
-        BufferedReader br = new BufferedReader(fr);
-
-        String line = br.readLine();
-        HashMap<Integer, HashMap<String, Double>> qidCosineMap = new HashMap<>();
-        String qid = "401";
-        HashMap<String, Double> h1 = new HashMap<>();
-        int flag = 0;
-        int flag2 = 0;
-        while (line != null) {
-            if (line.startsWith("#")) {
-                if (flag != 0) {
-                    qidCosineMap.put(Integer.parseInt(qid), h1);
-                    h1 = new HashMap<>();
-                    qid = line.substring(1, line.length());
-                } else {
-                    qid = line.substring(1, line.length());
-                    flag = 1;
-                }
-                if (qid.equals("421")) {
-                    flag2 = 1;
-                    break;
-                }
-                //   System.out.println(qid);
-            } else {
-
-                String st[] = line.split(" ");
-                String docPair = st[0] + st[1];
-                h1.put(docPair, Double.parseDouble(st[2]));
-
-            }
-            if (flag2 == 1) {
-                break;
-            }
-            line = br.readLine();
-            //System.out.println(line);
-        }
-        return qidCosineMap;
-    }
-
     public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter, String runfileName, HashMap<Integer, HashMap<String, Double>> h1, HashMap<Integer, HashMap<String, Double>> h2, Evaluator eval) throws Exception {
 
         String runFileLocation = prop.getProperty("runFileLocation");
@@ -408,7 +467,7 @@ class meanInferredAp {
             reader.close();
         }
         System.out.println("done");
-       // System.out.println(kdeMap);
+        // System.out.println(kdeMap);
         //System.out.println("");
         for (int i = startQrelno; i <= 420; i++) {
             double sum = 0;
@@ -1022,49 +1081,7 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
     }
 
-    public void storeCosineSimilarity(int startQRelno, int endQrelno, Evaluator eval, String runFileName, String filePath, IndexReader reader) throws Exception {
-        FileWriter fw = new FileWriter(new File(filePath));
-        BufferedWriter bw = new BufferedWriter(fw);
-
-        for (int i = startQRelno; i < endQrelno; i++) {
-            Integer h = i;
-            bw.write("#" + h.toString());
-            System.out.println("#" + h.toString());
-            bw.newLine();
-            InferredAp infAp = new InferredAp(h.toString(), 5, runFileName, eval);
-            KDEImplementation kde = new KDEImplementation();
-            Iterator it = infAp.reldocList.irrelMap.keySet().iterator();
-            //System.out.println(infAp.reldocList.irrelMap.size());
-            //  System.out.println(infAp.reldocList.relMap.size());
-
-            while (it.hasNext()) {
-                String docid1 = (String) it.next();
-                //  System.out.println(docid1);
-                Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
-                while (it2.hasNext()) {
-                    String docid2 = (String) it2.next();
-                    bw.write(docid1 + " " + docid2 + " " + kde.computeCosineSimilarity(kde.getIndex(docid1, reader), kde.getIndex(docid2, reader), reader));
-                    bw.newLine();
-                }
-
-            }
-            it = infAp.reldocList.relMap.keySet().iterator();
-            while (it.hasNext()) {
-                String docid1 = (String) it.next();
-                //  System.out.println(docid1);
-                Iterator it2 = infAp.reldocList.relMap.keySet().iterator();
-                while (it2.hasNext()) {
-                    String docid2 = (String) it2.next();
-                    bw.write(docid1 + " " + docid2 + " " + kde.computeCosineSimilarity(kde.getIndex(docid1, reader), kde.getIndex(docid2, reader), reader));
-                    bw.newLine();
-                }
-
-            }
-
-            // reader.close();
-        }
-        bw.close();
-    }
+    
 
     public void doSampling(String Filename, double percentage, int maxIter) throws IOException, Exception {
         FileWriter fw = new FileWriter(new File(Filename));
@@ -1146,13 +1163,13 @@ public class Evaluator {
 
             Evaluator evaluator = new Evaluator(qrelsFile, resFile);
             evaluator.load();
-            //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store1.txt", reader);
+            //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store2.txt", reader);
             meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
 
-            HashMap<Integer, HashMap<String, Double>> h1 = meanInAp.loadCosineValue("/home/procheta/Documents/Store.txt");
-            HashMap<Integer, HashMap<String, Double>> h2 = meanInAp.loadCosineValue("/home/procheta/Documents/Store1.txt");
+            HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
+            HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
 
-          // HashMap<String,Double> hh = h1.get(401);
+            // HashMap<String,Double> hh = h1.get(401);
             //   System.out.println(evaluator.retRcds.allRetMap.get("401").rtuples.c);
             // System.out.println(hh.size());
             // System.out.println(hh.get("FBIS4-20472FBIS3-19400"));
