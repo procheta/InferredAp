@@ -391,46 +391,6 @@ class meanInferredAp {
 
     }
 
-    public void computeRmsError(HashMap<String, Double> actualApList, HashMap<String, Double> meanInferApList, ArrayList runFileList) {
-
-        double sum = 0;
-
-        for (int count = 0; count < runFileList.size(); count++) {
-            Integer h = count;
-            sum += (actualApList.get(runFileList.get(count)) - meanInferApList.get(runFileList.get(count))) * (actualApList.get(runFileList.get(count)) - meanInferApList.get(runFileList.get(count)));
-
-        }
-
-        sum /= actualApList.size();
-        //  System.out.println(sum);
-        this.rmsError = sum;
-    }
-
-    public void rankSystem(Properties prop, int percentage, int maxIter) throws IOException, Exception {
-        Evaluator eval = new Evaluator(prop);
-        String runFileLocation = prop.getProperty("runFileLocation");
-        AllRunRetrievedResults alr = new AllRunRetrievedResults(prop.getProperty("run.file"), runFileLocation);
-        eval.load();
-        HashMap<String, Double> runPrecmap = new HashMap<>();
-        for (int j = 0; j < runfileList.size(); j++) {
-
-            double sum = 0;
-            eval.retRcds.resFile = runFileLocation + runfileList.get(j);
-            eval.retRcds = alr.allRunRetMap.get(runfileList.get(j));
-
-            for (int i = startQrelno; i <= endQrelno; i++) {
-                Integer h = i;
-                InferredAp iAp = new InferredAp(h.toString(), maxIter, runfileList.get(j), eval);
-                iAp.sampling(percentage);
-                iAp.processRetrievedResult();
-            }
-            sum /= 50;
-            runPrecmap.put(runfileList.get(j), sum);
-        }
-        this.meanInferApList = runPrecmap;
-        //  System.out.println(runPrecmap);
-    }
-
     public ArrayList getDocList(List<ResultTuple> ar) {
         ArrayList l = new ArrayList();
         for (int i = 0; i < ar.size(); i++) {
@@ -467,13 +427,13 @@ class meanInferredAp {
             reader.close();
         }
         System.out.println("done");
-        // System.out.println(kdeMap);
+        // System.out.iAp.println(kdeMap);
         //System.out.println("");
         for (int i = startQrelno; i <= 420; i++) {
             double sum = 0;
             Integer h = i;
 
-            InferredAp iAp = new InferredAp(h.toString(), maxIter, runfileName, eval);
+            InferredApKDE iAp = new InferredApKDE(h.toString(), maxIter, runfileName, eval);
             iAp.sampledData = sampleDataMap.get(h);
             iAp.reldoc = relDocMap.get(h);
             iAp.processRetrievedResult();
@@ -539,9 +499,7 @@ class ActualAp {
     public ActualAp(String qrelString, Evaluator eval) {
         this.reldocList = eval.relRcds.perQueryRels.get(qrelString);
         this.retriveList = eval.retRcds.allRetMap.get(qrelString);
-
         rankData = new HashMap<>();
-
     }
 
     public void computeRmserror(double[] a, double[] b) {
@@ -549,7 +507,6 @@ class ActualAp {
         double sum = 0;
         for (int i = 0; i < a.length; i++) {
             sum += (a[i] - b[i]) * (a[i] - b[i]);
-
         }
         sum /= a.length;
         sum = Math.sqrt(sum);
@@ -559,9 +516,7 @@ class ActualAp {
     public void sampling(int percentage) {
 
         Random ran = new Random();
-
         ArrayList<String> pool = reldocList.pool;
-
         int iter = 0;
         int rel_exists = 0;
         int irrel_exists = 0;
@@ -570,7 +525,6 @@ class ActualAp {
         while (iter < 5) {
 
             count = 0;
-
             while (count < sampleSize) {
                 int random = ran.nextInt(pool.size());
                 sampledData.add(pool.get(random));
@@ -640,66 +594,6 @@ class ActualAp {
         }
     }
 
-    public double computeActualAp2() {
-
-        double sum = 0;
-        int numberofRecords = 0;
-
-        for (int i = 1; i < retriveList.rtuples.size(); i++) {
-            if (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName)) {
-                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).dValue / (double) (i)) * ((rankData.get(i).relDocNo + .01) / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01));
-
-                numberofRecords++;
-
-            }
-
-        }
-
-        if (numberofRecords == 0) {
-            return 0;
-        } else {
-            return sum / numberofRecords;
-        }
-    }
-
-    public static double GetCorrelation(Vector<Double> xVect, Vector<Double> yVect) {
-        double meanX = 0.0, meanY = 0.0;
-        for (int i = 0; i < xVect.size(); i++) {
-            meanX += xVect.elementAt(i);
-            meanY += yVect.elementAt(i);
-        }
-
-        meanX /= xVect.size();
-        meanY /= yVect.size();
-
-        double sumXY = 0.0, sumX2 = 0.0, sumY2 = 0.0;
-        for (int i = 0; i < xVect.size(); i++) {
-            sumXY += ((xVect.elementAt(i) - meanX) * (yVect.elementAt(i) - meanY));
-            sumX2 += Math.pow(xVect.elementAt(i) - meanX, 2.0);
-            sumY2 += Math.pow(yVect.elementAt(i) - meanY, 2.0);
-        }
-
-        return (sumXY / (Math.sqrt(sumX2) * Math.sqrt(sumY2)));
-    }//end: GetCorrelation(X,Y)
-
-    public ArrayList getRunFileList(String runFileList) throws FileNotFoundException, IOException {
-
-        ArrayList runList = new ArrayList();
-
-        FileReader fr = new FileReader(new File(runFileList));
-
-        BufferedReader br = new BufferedReader(fr);
-        String line = br.readLine();
-
-        while (line != null) {
-            runList.add(line);
-            line = br.readLine();
-        }
-
-        return runList;
-
-    }
-
     public HashMap<String, Double> computeMeanActualAp(Properties prop, int startQid, int endQid, ArrayList runFileList) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
@@ -725,27 +619,6 @@ class ActualAp {
         }
 
         return meanActualApMap;
-    }
-
-    public int[] rankSystem(HashMap<String, Double> apList, ArrayList runList) {
-        double[] rankValues = new double[apList.size()];
-        int[] rankList = new int[apList.size()];
-        Iterator it = apList.keySet().iterator();
-        int index = 0;
-        HashMap<Double, String> rankSystemMap = new HashMap<>();
-        while (it.hasNext()) {
-            String st = (String) it.next();
-            rankValues[index++] = apList.get(st);
-            rankSystemMap.put(apList.get(st), st);
-        }
-        Arrays.sort(rankValues);
-        index = 0;
-        for (int i = 0; i < rankValues.length; i++) {
-            rankList[index++] = runList.indexOf(rankSystemMap.get(rankValues[i]));
-
-        }
-
-        return rankList;
     }
 
     public void storeActualAp(String FileName, int startQid, int endQid, ArrayList runFileList, Properties prop) throws IOException, Exception {
@@ -848,43 +721,6 @@ class InferredAp {
         // return sampledData;
     }
 
-    public double computeKendalTau(HashMap<String, Double> actualAp, HashMap<String, Double> inferredAp, ArrayList runfileList) {
-
-        HashMap<Double, Double> apPair = new HashMap<>();
-        for (int i = 0; i < runfileList.size(); i++) {
-            apPair.put(actualAp.get(runfileList.get(i)), inferredAp.get(runfileList.get(i)));
-        }
-        int coord = 0;
-        int discord = 0;
-        double coeff = 0;
-        Iterator it = apPair.keySet().iterator();
-
-        while (it.hasNext()) {
-            Double d2 = (Double) it.next();
-            Double d1 = apPair.get(d2);
-            Iterator it2 = apPair.keySet().iterator();
-            while (it2.hasNext()) {
-
-                Double d3 = (Double) it2.next();
-                Double d4 = apPair.get(d3);
-                if ((d1 > d3 && d2 > d4) || (d1 < d3 && d2 < d4)) {
-                    coord++;
-                }
-                if ((d1 > d3 && d2 < d4) || (d1 < d3 && d2 > d4)) {
-                    discord++;
-                }
-
-            }
-
-        }
-        System.out.println("Coord " + coord);
-        System.out.println("Discoord " + discord);
-        System.out.println(apPair.size());
-        coeff = (double) (coord - discord) / (double) (apPair.size() * (apPair.size() - 1) / 2);
-        return coeff;
-
-    }
-
     public void processRetrievedResult() {
         int r = 0;
         int n = 0;
@@ -911,11 +747,39 @@ class InferredAp {
         }
     }
 
-    public double computeInferredAp(HashMap<String, Double> KDEValues) {
+    public double computeInferredAp() {
 
         double sum = 0;
         int numberofRecords = 0;
 
+        for (int i = 1; i < retriveList.rtuples.size(); i++) {
+            if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
+
+                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
+                        / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
+                numberofRecords++;
+            }
+        }
+        if (numberofRecords == 0) {
+            return 0;
+        } else {
+            return sum / numberofRecords;
+        }
+    }
+
+}
+
+class InferredApKDE extends InferredAp {
+
+    public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval) throws Exception {
+        super(qrelString, maxIter, run, eval);
+    }
+
+    public double computeInferredAp(HashMap<String, Double> KDEValues) {
+
+        double sum = 0;
+        int numberofRecords = 0;
+        this.processRetrievedResult();
         for (int i = 1; i < retriveList.rtuples.size(); i++) {
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
 
@@ -949,21 +813,6 @@ class InferredAp {
         }
     }
 
-    public double[] getPrecisionValues(String fileName) throws FileNotFoundException, IOException {
-        double precisionArray[] = new double[129];
-
-        FileReader fr = new FileReader(new File(fileName));
-        BufferedReader br = new BufferedReader(fr);
-
-        String line = br.readLine();
-        int index = 0;
-        while (line != null) {
-            precisionArray[index++] = Double.parseDouble(line);
-            line = br.readLine();
-        }
-
-        return precisionArray;
-    }
 }
 
 class AllRunRetrievedResults {
@@ -1081,8 +930,6 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
     }
 
-    
-
     public void doSampling(String Filename, double percentage, int maxIter) throws IOException, Exception {
         FileWriter fw = new FileWriter(new File(Filename));
         BufferedWriter bw = new BufferedWriter(fw);
@@ -1159,6 +1006,11 @@ public class Evaluator {
             String resFile = prop.getProperty("res.file");
             String runFileList = prop.getProperty("run.file");
             String runFileLocation = prop.getProperty("runFileLocation");
+            String mode = prop.getProperty("mode");
+            if (mode.equals("")) {
+            } else {
+
+            }
             IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
 
             Evaluator evaluator = new Evaluator(qrelsFile, resFile);
@@ -1169,10 +1021,6 @@ public class Evaluator {
             HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
             HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
 
-            // HashMap<String,Double> hh = h1.get(401);
-            //   System.out.println(evaluator.retRcds.allRetMap.get("401").rtuples.c);
-            // System.out.println(hh.size());
-            // System.out.println(hh.get("FBIS4-20472FBIS3-19400"));
             reader.close();
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
             meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
