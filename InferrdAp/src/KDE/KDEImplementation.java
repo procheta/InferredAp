@@ -61,8 +61,12 @@ import org.apache.lucene.util.Version;
  *
  */
 
+
+
+//+++DG_Comments: No need for a separate package. Move to Evaluator. Change the package names to smaller cases.
 public class KDEImplementation {
 
+	//+++DG_Comments: This function shouldn't take any unneccessary arguments. Just pass the KDEInfAP object. 
    
     public HashMap<String, Double> calculateKde(Set judgedRel, ArrayList<String> unjudged, IndexReader reader,int qid,HashMap<Integer, HashMap<String, Double>> h1, HashMap<Integer, HashMap<String, Double>> h2 ) throws IOException {
         Iterator it = unjudged.iterator();
@@ -76,7 +80,7 @@ public class KDEImplementation {
         for (int i = 0; i < unjudged.size(); i++) {
             String docid = unjudged.get(i);
             //  System.out.println(docid);
-            Iterator it2 = judgedRel.iterator();
+            Iterator it2 = judgedRel.iterator();  // +++DG_Comments: Change to for (String docId : judgedRel) { ... 
             score = 0;
              String docidair="";
             double sim;
@@ -102,7 +106,7 @@ public class KDEImplementation {
                 }
             }
             score = score / judgedRel.size();
-            score = score / Math.sqrt(2 * 3.14);
+            score = score / Math.sqrt(2 * 3.14);  // DG_Comments: Precompute 2*Math.PI and store as a static final variable
            // System.out.println("score " + score);
             estmatedList.put(docid, score);
 

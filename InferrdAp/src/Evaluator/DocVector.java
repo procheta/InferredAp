@@ -43,15 +43,28 @@ public class DocVector {
     String docid;
     public ArrayList<TermFreq> termVector;
 
+	/*DG_Comments:
+	 * Don't open the IndexReader everytime while creating a DocVector object. This is highly inefficient
+	 * as IndexReader.open() is an expensive system call.
+	 *
+	 * Don't create the IndexSearcher object everytime. Pass these around from the calling function.
+	 *
+	 */
+
     public DocVector(String docid, String indexPath) throws IOException, ParseException {
         this.docid = docid;
         IndexReader reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
 
         Analyzer analyzer = new KeywordAnalyzer();
         IndexSearcher isearcher = new IndexSearcher(reader);
+		//+++DG_Comments: 
+    	// Use TrecDocParse.FIELD_ID instead of "id"
         QueryParser parser = new QueryParser(Version.LUCENE_CURRENT, "id", analyzer);
+
         IndexSearcher searcher = new IndexSearcher(reader);
-        Query query = parser.parse(docid);
+		//+++DG_Comments: An easier and better way is to directly set the term as a single query term (a BooleanQuery with MUST clause)
+		// than to use QueryParser
+        Query query = parser.parse(docid); 
         TopDocs topdocs = searcher.search(query, 1);
         int index = topdocs.scoreDocs[0].doc;
 
@@ -70,12 +83,15 @@ public class DocVector {
 
     }
 
-    public double computeCosineSimilarity(DocVector d) {
+    public double computeCosineSimilarity(DocVector d) {  // DG_Comments: Change name to cosineSim()
         int j = 0;
+		// +++DG_Comments: Give more meaningful names for norm1, norm2 and sum
         int norm1 = 0;
         int norm2 = 0;
         double sum = 0;
-        for (int i = 0; i < termVector.size(); i++) {
+        for (int i = 0; i < termVector.size(); i++) {  // DG_Comments: why check on the bounds of this object only and not on d?
+			// +++DG_Comments: Avoid multiple calls of the compareTo function by calling it only
+			// once and assigning to a variable. You can then check the variable value
             if (termVector.get(i).term.compareTo(d.termVector.get(j).term) > 0) {
                 if (j < d.termVector.size()) {
                     j++;
@@ -88,7 +104,7 @@ public class DocVector {
                     norm2 = norm2 + d.termVector.get(j).freq * d.termVector.get(j).freq;
                 }                
             }
-            
+           	//+++DG_Comments: Don't need to check the 0 condition! Simply use else! 
              if (termVector.get(i).term.compareTo(d.termVector.get(j).term) == 0) {
                  sum += d.termVector.get(j).freq * termVector.get(i).freq;
                 if (j < d.termVector.size()) 

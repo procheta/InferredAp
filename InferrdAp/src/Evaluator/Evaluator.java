@@ -38,6 +38,12 @@ import org.apache.lucene.store.FSDirectory;
  *
  * @author procheta
  */
+
+
+// DG_Comments: Some top level comments: Split this BIG file into meaningful smaller ones, e.g. you might
+// logically split into loading the datastructures for retrieval and relevance (separately) and then finally use them for computation in evaluation.
+// Currently, it's too garbled up...
+//
 class PerQueryRelDocs {
 
     String qid;
@@ -71,17 +77,19 @@ class PerQueryRelDocs {
 
     public HashMap<String, Double> precomputeCosineSim(String indexPath) throws IOException, ParseException {
 
-        HashMap<String, Double> perQuerydocCosineSim = new HashMap<>();
+        HashMap<String, Double> perQuerydocCosineSim = new HashMap<>();  // +++DG_Comments: Make perQuerydocCosineSim a member of this class. No point of returning. Keep this stored
+		// as a part of this object which can then be used later on.
 
         Iterator it = irrelMap.keySet().iterator();
         //System.out.println(infAp.reldocList.irrelMap.size());
         //  System.out.println(infAp.reldocList.relMap.size());
 
+		// +++DG_Comments: Change the loops to the more readable for (String relDocId: relMap.keySet()) {... for (String nrelDocId: irrelMap.keySet()) { ...  
         while (it.hasNext()) {
             String docid1 = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(docid1, indexPath);
-            Iterator it2 = relMap.keySet().iterator();
+            DocVector doc1 = new DocVector(docid1, indexPath);  //DG_Comments: Make the IndexReader object a member of this class. IndexSearcher can be obtained with a method call (I guess). Ensure the searcher is set from AllRelRcds. Create IndexReader once in AllRelRcds and pass it around in each PerQueryRelDocs.
+            Iterator it2 = relMap.keySet().iterator();  
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
                 DocVector doc2 = new DocVector(docid2, indexPath);
@@ -258,7 +266,7 @@ class ResultTuple implements Comparable<ResultTuple> {
 class RetrievedResults implements Comparable<RetrievedResults> {
 
     int qid;
-    List<ResultTuple> rtuples;
+    List<ResultTuple> rtuples;   // +++DG_Comments: You can take ArrayList here
     int numRelRet;
     float avgP;
     PerQueryRelDocs relInfo;
@@ -352,6 +360,10 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     }
 }
 
+//+++DG_Comments: Class name with a lower case??!!
+//There's no reason for this class to exist. Move the required (only) functions
+//to InfAP class (or only if you need to the KDEInfAp class). I don't think you're
+//doing anything KDE specific here. So, all you need is to move the functions to the InfAP class.
 class meanInferredAp {
 
     HashMap<String, Double> meanInferApList;
@@ -380,6 +392,7 @@ class meanInferredAp {
 
     }
 
+	//+++DG_Comments: You need this??
     public void listActualAp(Properties prop) {
         Evaluator eval = new Evaluator(prop);
         for (int i = startQrelno; i < endQrelno; i++) {
@@ -391,6 +404,7 @@ class meanInferredAp {
 
     }
 
+	//+++DG_Comments: Make this private
     public ArrayList getDocList(List<ResultTuple> ar) {
         ArrayList l = new ArrayList();
         for (int i = 0; i < ar.size(); i++) {
@@ -400,6 +414,7 @@ class meanInferredAp {
         return l;
     }
 
+	//+++DG_Comments: No KDE specific things here...
     public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter, String runfileName, HashMap<Integer, HashMap<String, Double>> h1, HashMap<Integer, HashMap<String, Double>> h2, Evaluator eval) throws Exception {
 
         String runFileLocation = prop.getProperty("runFileLocation");
@@ -438,7 +453,7 @@ class meanInferredAp {
             iAp.reldoc = relDocMap.get(h);
             iAp.processRetrievedResult();
             KDEImplementation kde = new KDEImplementation();
-            sum = iAp.computeInferredAp(kdeMap.get(h.toString()));
+            sum = iAp.computeInferredAp(kdeMap.get(h.toString())); // +++DG_Comments: Why store in hashmap and get here? Same loop is repeated. Why not just print the values? No need for containers to store them.
             System.out.println("Qid No " + i + " Inferred Ap value " + sum);
             meanInferApList.put(h.toString(), sum);//*/
 
@@ -475,6 +490,9 @@ class meanInferredAp {
 
         for (int count = 0; count < runFileList.size(); count++) {
             Integer h = count;
+
+			//+++DG_Comments: If all you're doing is just printing the values,, why do you
+			//bother saving them in a list. 
             Double infApValue = meanInferApList.get(runFileList.get(count));
 
             bw.write(runFileList.get(count) + "  " + infApValue.toString());
@@ -485,6 +503,7 @@ class meanInferredAp {
 
 }
 
+// DG_Comments: Why do you need a separate class for this?? Remove
 class ActualAp {
 
     PerQueryRelDocs reldocList;
@@ -639,6 +658,7 @@ class ActualAp {
     }
 }
 
+//+++DG_Comments: Check if you need this class....
 class inferredApCalData {
 
     int relDocNo;
@@ -818,9 +838,11 @@ class InferredApKDE extends InferredAp {
 class AllRunRetrievedResults {
 
     HashMap<String, AllRetrievedResults> allRunRetMap;
-    String RunfileList;
+    String RunfileList;  // DG_Comments: Variable names begin with lower-case
 
-    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException {
+    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException { 
+		//DG_Comments: Write a private load function and call from the constructor or make it public and call from the caller.
+		//Don't put everything in the constructor.
         this.RunfileList = runFileName;
         allRunRetMap = new HashMap<>();
         FileReader fr = new FileReader(new File(runFileName));
@@ -841,6 +863,7 @@ class AllRunRetrievedResults {
 
 }
 
+//+++DG_Comments: Are you sure you need this class?
 class AllRetrievedResults {
 
     Map<String, RetrievedResults> allRetMap;
@@ -930,6 +953,7 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
     }
 
+	//+++DG_Comments: Remove dead code! doSampling is never called!
     public void doSampling(String Filename, double percentage, int maxIter) throws IOException, Exception {
         FileWriter fw = new FileWriter(new File(Filename));
         BufferedWriter bw = new BufferedWriter(fw);
@@ -1002,28 +1026,53 @@ public class Evaluator {
             Properties prop = new Properties();
             prop.load(new FileReader(args[0]));
 
+			//+++DG_Comments: delegate the responsibility of reading the properties values to respective classes.
+			//Make sure you just pass around the properties object.
             String qrelsFile = prop.getProperty("qrels.file");
             String resFile = prop.getProperty("res.file");
             String runFileList = prop.getProperty("run.file");
             String runFileLocation = prop.getProperty("runFileLocation");
+
+
+			//+++DG_Comments: For this piece of code to work, you need to make KDEInfAp a special case (extended class)
+			// of InfAP. Assuming then that the function computeAP is overrideen in the KDEInfAp class, you will then be able
+			// to call like this...
+            // boolean kdeMode = Boolean.parseBoolean(prop.getProperty("kdeinf", "false"));
+			// InfAP infAPEvaluator = mode==true? new KDEInfAp(...) : new InfAP(...);
+			// infAPEvaluator.computeAP();
+			//
+			// In fact, Evaluator should be your base class. Both InfAp and KDEInfAp are to be derived from it.
+			// This will avoid passing around the Evaluator object to these two objects (see your own call in this main function).
+			// InfAp IS-A Evaluator rather than InfAp HAS-A Evaluator
             String mode = prop.getProperty("mode");
             if (mode.equals("")) {
             } else {
 
             }
-            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
+
+
+
+			//+++DG_Comments: This needs to be read from properties as well. I guess you would need to pass the
+			//properties to the AllRelRcds because you would need the 
+            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2"))); // DG_Comments: This reader is not USED!!
 
             Evaluator evaluator = new Evaluator(qrelsFile, resFile);
             evaluator.load();
             //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store2.txt", reader);
             meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
 
+
+			// +++DG_Comments: This is really bad coding style. There should be no requirement to pass around raw container
+			// objects like this among the objects. If you see something like this, revisit your design!
+			// As I said, store the pre-computed distances as a part of the PerQueryRelDocs themselves.
+			// With the HAS-A changed to IS-A you won't need to load/store the computed values from the main.
+
             HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
             HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
 
             reader.close();
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-            meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
+            meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator); // +++DG_Comments: Just pass prop. Nothing else!
 
         } catch (Exception ex) {
             ex.printStackTrace();
