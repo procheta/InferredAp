@@ -32,18 +32,13 @@ import org.apache.commons.math3.stat.correlation.KendallsCorrelation;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.FSDirectory;
 
 /**
  *
  * @author procheta
  */
-
-
-// DG_Comments: Some top level comments: Split this BIG file into meaningful smaller ones, e.g. you might
-// logically split into loading the datastructures for retrieval and relevance (separately) and then finally use them for computation in evaluation.
-// Currently, it's too garbled up...
-//
 class PerQueryRelDocs {
 
     String qid;
@@ -51,13 +46,19 @@ class PerQueryRelDocs {
     HashMap<String, Integer> irrelMap; // keyed by docid, entry stores the irrel value
     ArrayList<String> pool; // list of all the docs
     int numRel;
+    HashMap<String, Double> perQuerydocCosineSim;
+    IndexReader reader;
+    IndexSearcher searcher;
 
-    public PerQueryRelDocs(String qid) {
+    public PerQueryRelDocs(String qid,String indexPath) throws IOException {
         this.qid = qid;
         numRel = 0;
         relMap = new HashMap<>();
         irrelMap = new HashMap<>();
         pool = new ArrayList<>();
+        perQuerydocCosineSim = new HashMap<>();
+        reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
+        searcher = new IndexSearcher(reader);
     }
 
     void addTuple(String docId, int rel) {
@@ -75,44 +76,36 @@ class PerQueryRelDocs {
         }
     }
 
-    public HashMap<String, Double> precomputeCosineSim(String indexPath) throws IOException, ParseException {
-
-        HashMap<String, Double> perQuerydocCosineSim = new HashMap<>();  // +++DG_Comments: Make perQuerydocCosineSim a member of this class. No point of returning. Keep this stored
-		// as a part of this object which can then be used later on.
-
+    public void  precomputeCosineSim(String indexPath, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         Iterator it = irrelMap.keySet().iterator();
-        //System.out.println(infAp.reldocList.irrelMap.size());
-        //  System.out.println(infAp.reldocList.relMap.size());
-
-		// +++DG_Comments: Change the loops to the more readable for (String relDocId: relMap.keySet()) {... for (String nrelDocId: irrelMap.keySet()) { ...  
+        
         while (it.hasNext()) {
-            String docid1 = (String) it.next();
+            String irrelDocId = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(docid1, indexPath);  //DG_Comments: Make the IndexReader object a member of this class. IndexSearcher can be obtained with a method call (I guess). Ensure the searcher is set from AllRelRcds. Create IndexReader once in AllRelRcds and pass it around in each PerQueryRelDocs.
-            Iterator it2 = relMap.keySet().iterator();  
+            DocVector doc1 = new DocVector(irrelDocId, indexPath, reader, searcher);
+            Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
-                DocVector doc2 = new DocVector(docid2, indexPath);
-                perQuerydocCosineSim.put(docid1 + "#" + docid2, doc1.computeCosineSimilarity(doc2));
+                DocVector doc2 = new DocVector(docid2, indexPath, reader, searcher);
+                perQuerydocCosineSim.put(irrelDocId + "#" + docid2, doc1.cosineSim(doc2));
 
             }
 
         }
         it = relMap.keySet().iterator();
         while (it.hasNext()) {
-            String docid1 = (String) it.next();
+            String relDocId = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(docid1, indexPath);
+            DocVector doc1 = new DocVector(relDocId, indexPath, reader, searcher);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
-                DocVector doc2 = new DocVector(docid2, indexPath);
-                perQuerydocCosineSim.put(docid1 + "#" + docid2, doc1.computeCosineSimilarity(doc2));
+                DocVector doc2 = new DocVector(docid2, indexPath, reader, searcher);
+                perQuerydocCosineSim.put(relDocId + "#" + docid2, doc1.cosineSim(doc2));
             }
         }
 
-        return perQuerydocCosineSim;
-
+       
     }
 }
 
@@ -121,11 +114,13 @@ class AllRelRcds {
     String qrelsFile;
     HashMap<String, PerQueryRelDocs> perQueryRels;
     int totalNumRel;
+    String indexPath;
 
-    public AllRelRcds(String qrelsFile) {
+    public AllRelRcds(String qrelsFile,String indexPath) {
         this.qrelsFile = qrelsFile;
         perQueryRels = new HashMap<>();
         totalNumRel = 0;
+        this.indexPath = indexPath;
     }
 
     int getTotalNumRel() {
@@ -154,29 +149,29 @@ class AllRelRcds {
         fr.close();
     }
 
-    void storeRelRcd(String line) {
+    void storeRelRcd(String line) throws IOException {
         String[] tokens = line.split("\\s+");
         String qid = tokens[0];
         PerQueryRelDocs relTuple = perQueryRels.get(qid);
         if (relTuple == null) {
-            relTuple = new PerQueryRelDocs(qid);
+            relTuple = new PerQueryRelDocs(qid,indexPath);
             perQueryRels.put(qid, relTuple);
         }
         relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]));
     }
 
-    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo, String indexPath) throws IOException, ParseException {
+    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo, String indexPath, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         FileWriter fw = new FileWriter(new File(fileName));
         BufferedWriter bw = new BufferedWriter(fw);
         for (int qid = startQrelNo; qid < endQrelNo; qid++) {
 
             PerQueryRelDocs perqd = perQueryRels.get(qid);
-            HashMap<String, Double> cosinemap = perqd.precomputeCosineSim(indexPath);
-            Iterator it = cosinemap.keySet().iterator();
+             perqd.precomputeCosineSim(indexPath, reader, searcher);
+            Iterator it = perqd.perQuerydocCosineSim.keySet().iterator();
             while (it.hasNext()) {
                 String docPair = (String) it.next();
                 String st[] = docPair.split("#");
-                bw.write(st[0] + " " + st[1] + " " + cosinemap.get(docPair));
+                bw.write(st[0] + " " + st[1] + " " + perqd.perQuerydocCosineSim.get(docPair));
                 bw.newLine();
 
             }
@@ -266,7 +261,7 @@ class ResultTuple implements Comparable<ResultTuple> {
 class RetrievedResults implements Comparable<RetrievedResults> {
 
     int qid;
-    List<ResultTuple> rtuples;   // +++DG_Comments: You can take ArrayList here
+    List<ResultTuple> rtuples;
     int numRelRet;
     float avgP;
     PerQueryRelDocs relInfo;
@@ -360,10 +355,6 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     }
 }
 
-//+++DG_Comments: Class name with a lower case??!!
-//There's no reason for this class to exist. Move the required (only) functions
-//to InfAP class (or only if you need to the KDEInfAp class). I don't think you're
-//doing anything KDE specific here. So, all you need is to move the functions to the InfAP class.
 class meanInferredAp {
 
     HashMap<String, Double> meanInferApList;
@@ -391,77 +382,7 @@ class meanInferredAp {
         meanInferApList = new HashMap<>();
 
     }
-
-	//+++DG_Comments: You need this??
-    public void listActualAp(Properties prop) {
-        Evaluator eval = new Evaluator(prop);
-        for (int i = startQrelno; i < endQrelno; i++) {
-            Integer h = i;
-            ActualAp aap = new ActualAp(h.toString(), eval);
-            actualApList.put(h.toString(), aap.computeActualAp());
-
-        }
-
-    }
-
-	//+++DG_Comments: Make this private
-    public ArrayList getDocList(List<ResultTuple> ar) {
-        ArrayList l = new ArrayList();
-        for (int i = 0; i < ar.size(); i++) {
-            l.add(ar.get(i).docName);
-        }
-
-        return l;
-    }
-
-	//+++DG_Comments: No KDE specific things here...
-    public void computeMeanInferredApKDE(Properties prop, double percentage, int maxIter, String runfileName, HashMap<Integer, HashMap<String, Double>> h1, HashMap<Integer, HashMap<String, Double>> h2, Evaluator eval) throws Exception {
-
-        String runFileLocation = prop.getProperty("runFileLocation");
-
-        HashMap<String, HashMap<String, Double>> kdeMap = new HashMap<String, HashMap<String, Double>>();
-        // eval.retRcds.resFile = runFileLocation + "/" + runfileName;
-        HashMap<Integer, HashSet> sampleDataMap = new HashMap<>();
-        HashMap<Integer, HashSet> relDocMap = new HashMap<>();
-        HashMap<String, HashMap<String, Double>> cosineMap = new HashMap<>();
-
-        for (int i = startQrelno; i <= 420; i++) {
-            double sum = 0;
-            Integer h = i;
-            InferredAp iAp = new InferredAp(h.toString(), maxIter, runfileName, eval);
-            iAp.sampling(percentage);
-            iAp.processRetrievedResult();
-            KDEImplementation kde = new KDEImplementation();
-            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
-
-            kdeMap.put(h.toString(), kde.calculateKde(iAp.reldocList.relMap.keySet(), getDocList(iAp.retriveList.rtuples), reader, i, h1, h2));
-            // System.out.println("done "+i);
-            sampleDataMap.put(h, iAp.sampledData);
-            relDocMap.put(h, iAp.reldoc);
-
-            reader.close();
-        }
-        System.out.println("done");
-        // System.out.iAp.println(kdeMap);
-        //System.out.println("");
-        for (int i = startQrelno; i <= 420; i++) {
-            double sum = 0;
-            Integer h = i;
-
-            InferredApKDE iAp = new InferredApKDE(h.toString(), maxIter, runfileName, eval);
-            iAp.sampledData = sampleDataMap.get(h);
-            iAp.reldoc = relDocMap.get(h);
-            iAp.processRetrievedResult();
-            KDEImplementation kde = new KDEImplementation();
-            sum = iAp.computeInferredAp(kdeMap.get(h.toString())); // +++DG_Comments: Why store in hashmap and get here? Same loop is repeated. Why not just print the values? No need for containers to store them.
-            System.out.println("Qid No " + i + " Inferred Ap value " + sum);
-            meanInferApList.put(h.toString(), sum);//*/
-
-        }//*/
-
-    }
-
-    public void computeMeanInferredAp(Properties prop, int percentage, int maxIter) throws Exception {
+     public void computeMeanInferredAp(Properties prop, int percentage, int maxIter) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
         String runFileLocation = prop.getProperty("runFileLocation");
@@ -490,9 +411,6 @@ class meanInferredAp {
 
         for (int count = 0; count < runFileList.size(); count++) {
             Integer h = count;
-
-			//+++DG_Comments: If all you're doing is just printing the values,, why do you
-			//bother saving them in a list. 
             Double infApValue = meanInferApList.get(runFileList.get(count));
 
             bw.write(runFileList.get(count) + "  " + infApValue.toString());
@@ -503,169 +421,13 @@ class meanInferredAp {
 
 }
 
-// DG_Comments: Why do you need a separate class for this?? Remove
-class ActualAp {
-
-    PerQueryRelDocs reldocList;
-    RetrievedResults retriveList;
-    String qrelno;
-    String runNo;
-    HashMap<Integer, Integer> relDocNo;
-    HashMap<Integer, Integer> irrelDocNo;
-    HashMap<Integer, inferredApCalData> rankData;
-    HashSet<String> sampledData;
-
-    public ActualAp(String qrelString, Evaluator eval) {
-        this.reldocList = eval.relRcds.perQueryRels.get(qrelString);
-        this.retriveList = eval.retRcds.allRetMap.get(qrelString);
-        rankData = new HashMap<>();
-    }
-
-    public void computeRmserror(double[] a, double[] b) {
-
-        double sum = 0;
-        for (int i = 0; i < a.length; i++) {
-            sum += (a[i] - b[i]) * (a[i] - b[i]);
-        }
-        sum /= a.length;
-        sum = Math.sqrt(sum);
-        System.out.println("Rms " + sum);
-    }
-
-    public void sampling(int percentage) {
-
-        Random ran = new Random();
-        ArrayList<String> pool = reldocList.pool;
-        int iter = 0;
-        int rel_exists = 0;
-        int irrel_exists = 0;
-        int count = 0;
-        int sampleSize = pool.size() * percentage;
-        while (iter < 5) {
-
-            count = 0;
-            while (count < sampleSize) {
-                int random = ran.nextInt(pool.size());
-                sampledData.add(pool.get(random));
-                if (reldocList.relMap.containsKey(pool.get(random))) {
-                    rel_exists = 1;
-                }
-                if (reldocList.irrelMap.containsKey(pool.get(random))) {
-                    irrel_exists = 1;
-                }
-
-                count++;
-            }
-
-            if (rel_exists == 1 && irrel_exists == 1) {
-
-                break;
-            }
-
-            iter++;
-        }
-
-        // return sampledData;
-    }
-
-    public void processRetrievedResult() {
-        int r = 0, n = 0, d = 0;
-
-        for (int i = 0; i < retriveList.rtuples.size(); i++) {
-
-            if (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName)) {
-                r++;
-                inferredApCalData iapc = new inferredApCalData(r, i, d);
-                rankData.put(i, iapc);
-            } else if (reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName)) {
-                n++;
-                inferredApCalData iapc = new inferredApCalData(r, i, d);
-                rankData.put(i, iapc);
-            } else {
-                d++;
-                inferredApCalData iapc = new inferredApCalData(r, i, d);
-                rankData.put(i, iapc);
-
-            }
-
-        }
-    }
-
-    public double computeActualAp() {
-
-        double sum = 0;
-        int numberofRecords = 0;
-
-        for (int i = 1; i < retriveList.rtuples.size(); i++) {
-            if (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName)) {
-                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).dValue / (double) (i)) * ((rankData.get(i).relDocNo + .01) / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01));
-
-                numberofRecords++;
-
-            }
-
-        }
-
-        if (numberofRecords == 0) {
-            return 0;
-        } else {
-            return sum / numberofRecords;
-        }
-    }
-
-    public HashMap<String, Double> computeMeanActualAp(Properties prop, int startQid, int endQid, ArrayList runFileList) throws Exception {
-
-        Evaluator eval = new Evaluator(prop);
-        String runFileLocation = prop.getProperty("runFileLocation");
-        AllRunRetrievedResults alr = new AllRunRetrievedResults(prop.getProperty("run.file"), runFileLocation);
-        eval.load();
-        HashMap<String, Double> meanActualApMap = new HashMap<>();
-        for (int j = 0; j < runFileList.size(); j++) {
-            eval.retRcds.resFile = runFileLocation + runFileList.get(j);
-            eval.retRcds = alr.allRunRetMap.get(runFileList.get(j));
-            double sum = 0;
-            for (int i = startQid; i <= endQid; i++) {
-
-                Integer h = i;
-                ActualAp ap = new ActualAp(h.toString(), eval);
-                ap.processRetrievedResult();
-                sum += ap.computeActualAp();
-            }
-
-            sum /= runFileList.size();
-            meanActualApMap.put((String) runFileList.get(j), sum);//*/
-
-        }
-
-        return meanActualApMap;
-    }
-
-    public void storeActualAp(String FileName, int startQid, int endQid, ArrayList runFileList, Properties prop) throws IOException, Exception {
-        FileWriter fw = new FileWriter(new File(FileName));
-        BufferedWriter bw = new BufferedWriter(fw);
-
-        HashMap<String, Double> meanActualApMap = computeMeanActualAp(prop, startQid, endQid, runFileList);
-        // System.out.println(runFileList);
-
-        for (int count = 0; count < runFileList.size(); count++) {
-            Integer h = count;
-            Double infApValue = meanActualApMap.get(runFileList.get(count));
-
-            bw.write(runFileList.get(count) + "  " + infApValue.toString());
-            bw.newLine();
-        }
-        bw.close();
-    }
-}
-
-//+++DG_Comments: Check if you need this class....
-class inferredApCalData {
+class InferredApCalData {
 
     int relDocNo;
     int irrelDocNo;
     int dValue;
 
-    public inferredApCalData(int relDocNo, int irrelDocNo, int dValue) {
+    public InferredApCalData(int relDocNo, int irrelDocNo, int dValue) {
 
         this.dValue = dValue;
         this.relDocNo = relDocNo;
@@ -681,7 +443,7 @@ class InferredAp {
     RetrievedResults retriveList;
     int maxIter;
     HashSet<String> sampledData;
-    HashMap<Integer, inferredApCalData> rankData;
+    HashMap<Integer, InferredApCalData> rankData;
     String qrelno;
     String runNo;
     HashSet reldoc;
@@ -749,18 +511,18 @@ class InferredAp {
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName)) {
                 r++;
 
-                rankData.put(i, new inferredApCalData(r, n, d));
+                rankData.put(i, new InferredApCalData(r, n, d));
 
             } else if (sampledData.contains(retriveList.rtuples.get(i).docName) && reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName)) {
 
                 n++;
-                rankData.put(i, new inferredApCalData(r, n, d));
+                rankData.put(i, new InferredApCalData(r, n, d));
 
             } else {
                 if (!reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName) && !reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName)) {
                     d++;
                 }
-                rankData.put(i, new inferredApCalData(r, n, d));
+                rankData.put(i, new InferredApCalData(r, n, d));
 
             }
 
@@ -838,12 +600,10 @@ class InferredApKDE extends InferredAp {
 class AllRunRetrievedResults {
 
     HashMap<String, AllRetrievedResults> allRunRetMap;
-    String RunfileList;  // DG_Comments: Variable names begin with lower-case
+    String runfileList;
 
-    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException { 
-		//DG_Comments: Write a private load function and call from the constructor or make it public and call from the caller.
-		//Don't put everything in the constructor.
-        this.RunfileList = runFileName;
+    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException {
+        this.runfileList = runFileName;
         allRunRetMap = new HashMap<>();
         FileReader fr = new FileReader(new File(runFileName));
         BufferedReader br = new BufferedReader(fr);
@@ -863,7 +623,6 @@ class AllRunRetrievedResults {
 
 }
 
-//+++DG_Comments: Are you sure you need this class?
 class AllRetrievedResults {
 
     Map<String, RetrievedResults> allRetMap;
@@ -948,51 +707,18 @@ public class Evaluator {
     AllRelRcds relRcds;
     AllRetrievedResults retRcds;
 
-    public Evaluator(String qrelsFile, String resFile) {
-        relRcds = new AllRelRcds(qrelsFile);
+    public Evaluator(String qrelsFile, String resFile,String indexPath) {
+        relRcds = new AllRelRcds(qrelsFile,indexPath);
         retRcds = new AllRetrievedResults(resFile);
     }
 
-	//+++DG_Comments: Remove dead code! doSampling is never called!
-    public void doSampling(String Filename, double percentage, int maxIter) throws IOException, Exception {
-        FileWriter fw = new FileWriter(new File(Filename));
-        BufferedWriter bw = new BufferedWriter(fw);
-        Iterator it = relRcds.perQueryRels.keySet().iterator();
-        Integer i = 401;
-        while (it.hasNext()) {
-            String qid = (String) it.next();
-            InferredAp iap = new InferredAp(i.toString(), maxIter, "", this);
-
-            iap.sampling(percentage);
-            Iterator it2 = relRcds.perQueryRels.get(i.toString()).pool.iterator();
-            while (it2.hasNext()) {
-                String st = (String) it2.next();
-                if (relRcds.perQueryRels.get(i.toString()).irrelMap.containsKey(st) && iap.sampledData.contains(st)) {
-                    System.out.println(i.toString() + " " + "0" + " " + st + " " + "0");
-                    bw.write(i.toString() + " " + "0" + " " + st + " " + "0");
-                } else if (relRcds.perQueryRels.get(i.toString()).relMap.containsKey(st) && iap.sampledData.contains(st)) {
-                    System.out.println(i.toString() + " " + "0" + " " + st + " " + "1");
-                    bw.write(i.toString() + " " + "0" + st + " " + "1");
-                } else if (relRcds.perQueryRels.get(i.toString()).relMap.containsKey(st) || relRcds.perQueryRels.get(i.toString()).irrelMap.containsKey(st)) {
-                    System.out.println(i.toString() + " " + "0" + " " + st + " " + "-1");
-                    bw.write(i.toString() + " " + "0" + " " + st + " " + "-1");
-                }
-
-            }
-            // bw.write(qid + " "+ "0"+);
-
-            i++;
-
-        }
-        bw.close();
-
-    }
-
+    
     public Evaluator(Properties prop) {
 
         String qrelsFile = prop.getProperty("qrels.file");
         String resFile = prop.getProperty("res.file");
-        relRcds = new AllRelRcds(qrelsFile);
+        String indexPath = prop.getProperty("index.file");
+        relRcds = new AllRelRcds(qrelsFile,indexPath);
         retRcds = new AllRetrievedResults(resFile);
     }
 
@@ -1026,53 +752,29 @@ public class Evaluator {
             Properties prop = new Properties();
             prop.load(new FileReader(args[0]));
 
-			//+++DG_Comments: delegate the responsibility of reading the properties values to respective classes.
-			//Make sure you just pass around the properties object.
             String qrelsFile = prop.getProperty("qrels.file");
             String resFile = prop.getProperty("res.file");
             String runFileList = prop.getProperty("run.file");
+            String indexPath = prop.getProperty("index.file");
             String runFileLocation = prop.getProperty("runFileLocation");
-
-
-			//+++DG_Comments: For this piece of code to work, you need to make KDEInfAp a special case (extended class)
-			// of InfAP. Assuming then that the function computeAP is overrideen in the KDEInfAp class, you will then be able
-			// to call like this...
-            // boolean kdeMode = Boolean.parseBoolean(prop.getProperty("kdeinf", "false"));
-			// InfAP infAPEvaluator = mode==true? new KDEInfAp(...) : new InfAP(...);
-			// infAPEvaluator.computeAP();
-			//
-			// In fact, Evaluator should be your base class. Both InfAp and KDEInfAp are to be derived from it.
-			// This will avoid passing around the Evaluator object to these two objects (see your own call in this main function).
-			// InfAp IS-A Evaluator rather than InfAp HAS-A Evaluator
             String mode = prop.getProperty("mode");
             if (mode.equals("")) {
             } else {
 
             }
+            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
 
-
-
-			//+++DG_Comments: This needs to be read from properties as well. I guess you would need to pass the
-			//properties to the AllRelRcds because you would need the 
-            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2"))); // DG_Comments: This reader is not USED!!
-
-            Evaluator evaluator = new Evaluator(qrelsFile, resFile);
+            Evaluator evaluator = new Evaluator(qrelsFile, resFile,indexPath);
             evaluator.load();
             //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store2.txt", reader);
             meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-
-
-			// +++DG_Comments: This is really bad coding style. There should be no requirement to pass around raw container
-			// objects like this among the objects. If you see something like this, revisit your design!
-			// As I said, store the pre-computed distances as a part of the PerQueryRelDocs themselves.
-			// With the HAS-A changed to IS-A you won't need to load/store the computed values from the main.
 
             HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
             HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
 
             reader.close();
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-            meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator); // +++DG_Comments: Just pass prop. Nothing else!
+           // meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
 
         } catch (Exception ex) {
             ex.printStackTrace();
