@@ -5,7 +5,7 @@
  */
 package Evaluator;
 
-import KDE.KDEImplementation;
+import kde.KDEImplementation;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -50,7 +50,7 @@ class PerQueryRelDocs {
     IndexReader reader;
     IndexSearcher searcher;
 
-    public PerQueryRelDocs(String qid,String indexPath) throws IOException {
+    public PerQueryRelDocs(String qid, String indexPath) throws IOException {
         this.qid = qid;
         numRel = 0;
         relMap = new HashMap<>();
@@ -76,17 +76,17 @@ class PerQueryRelDocs {
         }
     }
 
-    public void  precomputeCosineSim(String indexPath, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
+    public void precomputeCosineSim(IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         Iterator it = irrelMap.keySet().iterator();
-        
+
         while (it.hasNext()) {
             String irrelDocId = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(irrelDocId, indexPath, reader, searcher);
+            DocVector doc1 = new DocVector(irrelDocId, reader, searcher);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
-                DocVector doc2 = new DocVector(docid2, indexPath, reader, searcher);
+                DocVector doc2 = new DocVector(docid2, reader, searcher);
                 perQuerydocCosineSim.put(irrelDocId + "#" + docid2, doc1.cosineSim(doc2));
 
             }
@@ -96,16 +96,15 @@ class PerQueryRelDocs {
         while (it.hasNext()) {
             String relDocId = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(relDocId, indexPath, reader, searcher);
+            DocVector doc1 = new DocVector(relDocId,  reader, searcher);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
-                DocVector doc2 = new DocVector(docid2, indexPath, reader, searcher);
+                DocVector doc2 = new DocVector(docid2,  reader, searcher);
                 perQuerydocCosineSim.put(relDocId + "#" + docid2, doc1.cosineSim(doc2));
             }
         }
 
-       
     }
 }
 
@@ -116,24 +115,13 @@ class AllRelRcds {
     int totalNumRel;
     String indexPath;
 
-    public AllRelRcds(String qrelsFile,String indexPath) {
+    public AllRelRcds(String qrelsFile, String indexPath) {
         this.qrelsFile = qrelsFile;
         perQueryRels = new HashMap<>();
         totalNumRel = 0;
         this.indexPath = indexPath;
     }
-
-    int getTotalNumRel() {
-        if (totalNumRel > 0) {
-            return totalNumRel;
-        }
-
-        for (Map.Entry<String, PerQueryRelDocs> e : perQueryRels.entrySet()) {
-            PerQueryRelDocs perQryRelDocs = e.getValue();
-            totalNumRel += perQryRelDocs.numRel;
-        }
-        return totalNumRel;
-    }
+  
 
     void load() throws Exception {
         //  System.out.println(qrelsFile);
@@ -154,7 +142,7 @@ class AllRelRcds {
         String qid = tokens[0];
         PerQueryRelDocs relTuple = perQueryRels.get(qid);
         if (relTuple == null) {
-            relTuple = new PerQueryRelDocs(qid,indexPath);
+            relTuple = new PerQueryRelDocs(qid, indexPath);
             perQueryRels.put(qid, relTuple);
         }
         relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]));
@@ -166,7 +154,7 @@ class AllRelRcds {
         for (int qid = startQrelNo; qid < endQrelNo; qid++) {
 
             PerQueryRelDocs perqd = perQueryRels.get(qid);
-             perqd.precomputeCosineSim(indexPath, reader, searcher);
+            perqd.precomputeCosineSim(reader, searcher);
             Iterator it = perqd.perQuerydocCosineSim.keySet().iterator();
             while (it.hasNext()) {
                 String docPair = (String) it.next();
@@ -236,9 +224,7 @@ class AllRelRcds {
         return buff.toString();
     }
 
-    PerQueryRelDocs getRelInfo(String qid) {
-        return perQueryRels.get(qid);
-    }
+   
 }
 
 class ResultTuple implements Comparable<ResultTuple> {
@@ -264,17 +250,21 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     List<ResultTuple> rtuples;
     int numRelRet;
     float avgP;
-    PerQueryRelDocs relInfo;
+    ArrayList<String>pool;
+    
 
-    public RetrievedResults(String qid) {
+    public RetrievedResults(String qid) throws IOException {
         this.qid = Integer.parseInt(qid);
         this.rtuples = new ArrayList<>(1000);
         avgP = -1;
         numRelRet = -1;
+        pool = new ArrayList<>();
+       
     }
 
     void addTuple(String docName, int rank) {
         rtuples.add(new ResultTuple(docName, rank));
+        pool.add(docName);
     }
 
     public String toString() {
@@ -295,58 +285,7 @@ class RetrievedResults implements Comparable<RetrievedResults> {
             Integer relIntObj = relInfo.relMap.get(rt.docName);
             rt.rel = relIntObj == null ? 0 : relIntObj.intValue();
         }
-        this.relInfo = relInfo;
-    }
-
-    float computeAP() {
-        if (avgP > -1) {
-            return avgP;
-        }
-
-        float prec = 0;
-        int numRel = relInfo.numRel;
-        int numRelSeen = 0;
-        for (ResultTuple tuple : this.rtuples) {
-            if (tuple.rel < 1) {
-                continue;
-            }
-            numRelSeen++;
-            prec += numRelSeen / (float) (tuple.rank);
-        }
-        numRelRet = numRelSeen;
-        prec /= (float) numRel;
-        this.avgP = prec;
-
-        return prec;
-    }
-
-    float precAtTop(int k) {
-        int numRelSeen = 0;
-        int numSeen = 0;
-        for (ResultTuple tuple : this.rtuples) {
-            if (tuple.rel >= 1) {
-                numRelSeen++;
-            }
-            if (++numSeen >= k) {
-                break;
-            }
-        }
-        return numRelSeen / (float) k;
-    }
-
-    float computeRecall() {
-        if (numRelRet > -1) {
-            return numRelRet;
-        }
-        int numRelSeen = 0;
-        for (ResultTuple tuple : this.rtuples) {
-            if (tuple.rel < 1) {
-                continue;
-            }
-            numRelSeen++;
-        }
-        numRelRet = numRelSeen;
-        return numRelSeen;
+       // this.relInfo = relInfo;
     }
 
     @Override
@@ -355,16 +294,89 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     }
 }
 
-class meanInferredAp {
+class AllRunRetrievedResults {
+
+    HashMap<String, AllRetrievedResults> allRunRetMap;
+    String runfileList;
+
+    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException {
+        this.runfileList = runFileName;
+        allRunRetMap = new HashMap<>();
+        FileReader fr = new FileReader(new File(runFileName));
+        BufferedReader br = new BufferedReader(fr);
+        String line = br.readLine();
+
+        while (line != null) {
+            String runFileLocation = location + "/" + line;
+            // System.out.println(runFileLocation);
+            AllRetrievedResults alr = new AllRetrievedResults(runFileLocation);
+            alr.load();
+            allRunRetMap.put(line, alr);
+            //System.out.println(line);
+            line = br.readLine();
+        }
+
+    }
+
+}
+
+class AllRetrievedResults {
+
+    Map<String, RetrievedResults> allRetMap;
+    String resFile;
+    AllRelRcds allRelInfo;
+
+    public AllRetrievedResults(String resFile) {
+        this.resFile = resFile;
+        allRetMap = new TreeMap<>();
+    }
+
+    public void load() {
+        String line;
+
+        try (FileReader fr = new FileReader(resFile);
+                BufferedReader br = new BufferedReader(fr);) {
+            while ((line = br.readLine()) != null) {
+                storeRetRcd(line);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    void storeRetRcd(String line) throws IOException {
+        String[] tokens = line.split("\\s+");
+        String qid = tokens[0];
+        RetrievedResults res = allRetMap.get(qid);
+        if (res == null) {
+            res = new RetrievedResults(qid);
+            allRetMap.put(qid, res);
+        }
+        res.addTuple(tokens[2], Integer.parseInt(tokens[3]));
+        res.pool.add(tokens[2]);
+      //  System.out.println("hhh");
+    }
+
+    public String toString() {
+        StringBuffer buff = new StringBuffer();
+        for (Map.Entry<String, RetrievedResults> e : allRetMap.entrySet()) {
+            RetrievedResults res = e.getValue();
+            buff.append(res.toString()).append("\n");
+        }
+        return buff.toString();
+    }
+
+   
+}
+class MeanInferredAp {
 
     HashMap<String, Double> meanInferApList;
     ArrayList<String> runfileList;
-    HashMap<String, Double> actualApList;
     int startQrelno;
     int endQrelno;
     double rmsError;
 
-    public meanInferredAp(int startQrelno, int endQrelNo, String runFileName) throws FileNotFoundException, IOException {
+    public MeanInferredAp(int startQrelno, int endQrelNo, String runFileName) throws FileNotFoundException, IOException {
 
         this.startQrelno = startQrelno;
         this.endQrelno = endQrelNo;
@@ -382,22 +394,22 @@ class meanInferredAp {
         meanInferApList = new HashMap<>();
 
     }
-     public void computeMeanInferredAp(Properties prop, int percentage, int maxIter) throws Exception {
+
+    public void computeMeanInferredAp(Properties prop, int percentage, int maxIter) throws Exception {
 
         Evaluator eval = new Evaluator(prop);
         String runFileLocation = prop.getProperty("runFileLocation");
         AllRunRetrievedResults alr = new AllRunRetrievedResults(prop.getProperty("run.file"), runFileLocation);
         eval.load();
-        System.out.println("done");
         for (int i = startQrelno; i <= endQrelno; i++) {
             double sum = 0;
             Integer h = i;
-
             InferredAp iAp = new InferredAp(h.toString(), maxIter, "input.kdd8sh16", eval);
             iAp.sampling(percentage);
             eval.retRcds.resFile = runFileLocation + "/input.kdd8sh16";
             eval.retRcds = alr.allRunRetMap.get(runFileLocation + "/input.kdd8sh16");
             iAp.processRetrievedResult();
+            sum = iAp.computeInferredAp();
             System.out.println("Qid No " + i + " Inferred Ap value " + sum);
             meanInferApList.put(h.toString(), sum);//*/
 
@@ -452,11 +464,8 @@ class InferredAp {
         this.qrelno = qrelString;
         this.maxIter = maxIter;
         sampledData = new HashSet<>();
-
         this.runNo = run;
-        // System.out.println(qrelString);
         this.reldocList = eval.relRcds.perQueryRels.get(qrelString);
-        //  System.out.println(qrelString);
         this.retriveList = eval.retRcds.allRetMap.get(qrelString);
         this.rankData = new HashMap<>();
 
@@ -562,18 +571,18 @@ class InferredApKDE extends InferredAp {
         double sum = 0;
         int numberofRecords = 0;
         this.processRetrievedResult();
+       // System.out.println("gggg");
         for (int i = 1; i < retriveList.rtuples.size(); i++) {
+           
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-
-                // sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
-                //    / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
                 sum += (1 / (double) (i + 1));
+                 
                 for (int j = 0; j < i; j++) {
                     if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
                         try {
                             sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
                         } catch (Exception e) {
-                            System.out.println(retriveList.rtuples.get(j).docName);
+                            //System.out.println(retriveList.rtuples.get(j).docName);
                         }
                     } else {
                         if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
@@ -591,134 +600,31 @@ class InferredApKDE extends InferredAp {
         if (numberofRecords == 0) {
             return 0;
         } else {
+            System.out.println(sum / numberofRecords);
             return sum / numberofRecords;
         }
     }
-
+    
 }
 
-class AllRunRetrievedResults {
 
-    HashMap<String, AllRetrievedResults> allRunRetMap;
-    String runfileList;
-
-    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException {
-        this.runfileList = runFileName;
-        allRunRetMap = new HashMap<>();
-        FileReader fr = new FileReader(new File(runFileName));
-        BufferedReader br = new BufferedReader(fr);
-        String line = br.readLine();
-
-        while (line != null) {
-            String runFileLocation = location + "/" + line;
-            // System.out.println(runFileLocation);
-            AllRetrievedResults alr = new AllRetrievedResults(runFileLocation);
-            alr.load();
-            allRunRetMap.put(line, alr);
-            //System.out.println(line);
-            line = br.readLine();
-        }
-
-    }
-
-}
-
-class AllRetrievedResults {
-
-    Map<String, RetrievedResults> allRetMap;
-    String resFile;
-    AllRelRcds allRelInfo;
-
-    public AllRetrievedResults(String resFile) {
-        this.resFile = resFile;
-        allRetMap = new TreeMap<>();
-    }
-
-    public void load() {
-        String line;
-
-        try (FileReader fr = new FileReader(resFile);
-                BufferedReader br = new BufferedReader(fr);) {
-            while ((line = br.readLine()) != null) {
-                storeRetRcd(line);
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-    }
-
-    void storeRetRcd(String line) {
-        String[] tokens = line.split("\\s+");
-        String qid = tokens[0];
-        RetrievedResults res = allRetMap.get(qid);
-        if (res == null) {
-            res = new RetrievedResults(qid);
-            allRetMap.put(qid, res);
-        }
-        res.addTuple(tokens[2], Integer.parseInt(tokens[3]));
-    }
-
-    public String toString() {
-        StringBuffer buff = new StringBuffer();
-        for (Map.Entry<String, RetrievedResults> e : allRetMap.entrySet()) {
-            RetrievedResults res = e.getValue();
-            buff.append(res.toString()).append("\n");
-        }
-        return buff.toString();
-    }
-
-    public void fillRelInfo(AllRelRcds relInfo) {
-        for (Map.Entry<String, RetrievedResults> e : allRetMap.entrySet()) {
-            RetrievedResults res = e.getValue();
-            PerQueryRelDocs thisRelInfo = relInfo.getRelInfo(String.valueOf(res.qid));
-            res.fillRelInfo(thisRelInfo);
-        }
-        this.allRelInfo = relInfo;
-    }
-
-    String computeAll() {
-        StringBuffer buff = new StringBuffer();
-        float map = 0f;
-        float gm_ap = 0f;
-        float avgRecall = 0f;
-        float numQueries = (float) allRetMap.size();
-        float pAt5 = 0f;
-
-        for (Map.Entry<String, RetrievedResults> e : allRetMap.entrySet()) {
-            RetrievedResults res = e.getValue();
-            float ap = res.computeAP();
-            map += ap;
-            gm_ap += Math.log(ap);
-            avgRecall += res.computeRecall();
-            pAt5 += res.precAtTop(5);
-        }
-
-        buff.append("recall:\t").append(avgRecall / (float) allRelInfo.getTotalNumRel()).append("\n");
-        buff.append("map:\t").append(map / numQueries).append("\n");
-        buff.append("gmap:\t").append((float) Math.exp(gm_ap / numQueries)).append("\n");
-        buff.append("P@5:\t").append(pAt5 / numQueries).append("\n");
-
-        return buff.toString();
-    }
-}
 
 public class Evaluator {
 
     AllRelRcds relRcds;
     AllRetrievedResults retRcds;
 
-    public Evaluator(String qrelsFile, String resFile,String indexPath) {
-        relRcds = new AllRelRcds(qrelsFile,indexPath);
+    public Evaluator(String qrelsFile, String resFile, String indexPath) {
+        relRcds = new AllRelRcds(qrelsFile, indexPath);
         retRcds = new AllRetrievedResults(resFile);
     }
 
-    
     public Evaluator(Properties prop) {
 
         String qrelsFile = prop.getProperty("qrels.file");
         String resFile = prop.getProperty("res.file");
         String indexPath = prop.getProperty("index.file");
-        relRcds = new AllRelRcds(qrelsFile,indexPath);
+        relRcds = new AllRelRcds(qrelsFile, indexPath);
         retRcds = new AllRetrievedResults(resFile);
     }
 
@@ -727,13 +633,7 @@ public class Evaluator {
         retRcds.load();
     }
 
-    public void fillRelInfo() {
-        retRcds.fillRelInfo(relRcds);
-    }
-
-    public String computeAll() {
-        return retRcds.computeAll();
-    }
+   
 
     @Override
     public String toString() {
@@ -746,7 +646,7 @@ public class Evaluator {
     public static void main(String[] args) {
         if (args.length < 1) {
             args = new String[1];
-            args[0] = "/home/procheta/NetBeansProjects/TrecDocParse/src/evaluator/init.properties";
+            args[0] = "/home/procheta/NetBeansProjects/InferrdAp/src/Evaluator/init.properties";
         }
         try {
             Properties prop = new Properties();
@@ -758,23 +658,35 @@ public class Evaluator {
             String indexPath = prop.getProperty("index.file");
             String runFileLocation = prop.getProperty("runFileLocation");
             String mode = prop.getProperty("mode");
-            if (mode.equals("")) {
+          /*  if (mode.equals("")) {
             } else {
 
-            }
+            }*/
             IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
-
-            Evaluator evaluator = new Evaluator(qrelsFile, resFile,indexPath);
+            
+            Evaluator evaluator = new Evaluator(qrelsFile, resFile, indexPath);
             evaluator.load();
             //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store2.txt", reader);
-            meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
+           // MeanInferredAp meanInAp = new MeanInferredAp(401, 450, runFileList);
 
             HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
             HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
 
             reader.close();
+            KDEImplementation kdei = new KDEImplementation();
+        //    System.out.println(evaluator.retRcds.allRetMap.get("401").pool);
+            InferredAp iap = new InferredAp("401", 5, mode, evaluator);
+          //  System.out.println(iap.retriveList.pool);
+           // System.out.println(new InferredAp(qrelsFile, 5, mode, evaluator).retriveList.pool);
+        //   kdei.calculateKde(new InferredAp("401", 5, mode, evaluator).sampledData, new InferredAp(qrelsFile, 5, mode, evaluator).retriveList.pool, reader,401, h1, h2);
+           InferredApKDE iak = new InferredApKDE("401", 5, "input.kdd8sh16", evaluator);
+           iak.sampling(.30);
+           
+          // kdei.calculateKde(iak.sampledData, iak.retriveList.pool, reader, 401, h1, h2);
+            iak.computeInferredAp( kdei.calculateKde(iak.sampledData, iak.retriveList.pool, reader, 401, h1, h2));
+
             //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-           // meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
+            // meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
 
         } catch (Exception ex) {
             ex.printStackTrace();
