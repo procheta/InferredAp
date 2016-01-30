@@ -43,7 +43,7 @@ public class DocVector {
     String docid;
     public ArrayList<TermFreq> termVector;
 
-    public DocVector(String docid, String indexPath, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
+    public DocVector(String docid,IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         this.docid = docid;
         Analyzer analyzer = new KeywordAnalyzer();
         QueryParser parser = new QueryParser(Version.LUCENE_CURRENT, "id", analyzer);
