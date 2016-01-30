@@ -86,7 +86,7 @@ public class KDEImplementation {
                     // double sim = computeCosineSimilarity(getIndex(docid, reader), getIndex(docid2, reader),reader);
                     if (h3.containsKey(docidair)) {
                         sim = h3.get(docidair);
-                       
+                      
                     } else {
                         sim = h4.get(docidair);
                     }
@@ -98,9 +98,11 @@ public class KDEImplementation {
                     // System.out.println(qid);
                 }
             }
+          //  System.out.println(score);
             score = score / judgedRel.size();
+           //  System.out.println("score " + score);
             score = score / val;
-            // System.out.println("score " + score);
+            
             estmatedList.put(docid, score);
 
         }
@@ -111,11 +113,8 @@ public class KDEImplementation {
     public static void main(String[] args) throws IOException, ParseException {
         KDEImplementation kde = new KDEImplementation();
         IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
-
-       // kde.getIndex("FBIS3-5642", reader);
-        //  kde.computeCosineSimilarity(kde.getIndex("FT923-1528", reader), kde.getIndex("FBIS3-5642", reader), reader);
         reader.close();
-        // System.out.println(kde.getIndex("FBIS4-3895", reader));
+       
     }
 
 }
