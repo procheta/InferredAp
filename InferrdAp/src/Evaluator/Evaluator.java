@@ -76,7 +76,7 @@ class PerQueryRelDocs {
         }
     }
 
-    public void precomputeCosineSim(IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
+    public void precomputeCosineSim() throws IOException, ParseException {
         Iterator it = irrelMap.keySet().iterator();
 
         while (it.hasNext()) {
@@ -154,7 +154,7 @@ class AllRelRcds {
         for (int qid = startQrelNo; qid < endQrelNo; qid++) {
 
             PerQueryRelDocs perqd = perQueryRels.get(qid);
-            perqd.precomputeCosineSim(reader, searcher);
+            perqd.precomputeCosineSim();
             Iterator it = perqd.perQuerydocCosineSim.keySet().iterator();
             while (it.hasNext()) {
                 String docPair = (String) it.next();
