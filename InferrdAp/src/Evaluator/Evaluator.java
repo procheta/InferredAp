@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 import org.apache.commons.math3.stat.correlation.KendallsCorrelation;
@@ -50,15 +51,26 @@ class PerQueryRelDocs {
     IndexReader reader;
     IndexSearcher searcher;
 
-    public PerQueryRelDocs(String qid, String indexPath) throws IOException {
+    public PerQueryRelDocs(String qid, IndexReader reader, String cosineFilename) throws IOException, ParseException {
         this.qid = qid;
         numRel = 0;
         relMap = new HashMap<>();
         irrelMap = new HashMap<>();
         pool = new ArrayList<>();
-        perQuerydocCosineSim = new HashMap<>();
-        reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
+        this.reader = reader;
         searcher = new IndexSearcher(reader);
+        precomputeCosineSim();
+    }
+
+    public PerQueryRelDocs(String qid, IndexReader reader) throws IOException, ParseException {
+        this.qid = qid;
+        numRel = 0;
+        relMap = new HashMap<>();
+        irrelMap = new HashMap<>();
+        pool = new ArrayList<>();
+        this.reader = reader;
+        searcher = new IndexSearcher(reader);
+        perQuerydocCosineSim = new HashMap<>();
     }
 
     void addTuple(String docId, int rel) {
@@ -78,10 +90,12 @@ class PerQueryRelDocs {
 
     public void precomputeCosineSim() throws IOException, ParseException {
         Iterator it = irrelMap.keySet().iterator();
-
+        System.out.println(qid);
+        System.out.println(irrelMap.size());
+        System.out.println(relMap.size());
         while (it.hasNext()) {
             String irrelDocId = (String) it.next();
-            //  System.out.println(docid1);
+            // System.out.println(irrelDocId);
             DocVector doc1 = new DocVector(irrelDocId, reader, searcher);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
@@ -92,15 +106,16 @@ class PerQueryRelDocs {
             }
 
         }
+        System.out.println("done");
         it = relMap.keySet().iterator();
         while (it.hasNext()) {
             String relDocId = (String) it.next();
             //  System.out.println(docid1);
-            DocVector doc1 = new DocVector(relDocId,  reader, searcher);
+            DocVector doc1 = new DocVector(relDocId, reader, searcher);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
                 String docid2 = (String) it2.next();
-                DocVector doc2 = new DocVector(docid2,  reader, searcher);
+                DocVector doc2 = new DocVector(docid2, reader, searcher);
                 perQuerydocCosineSim.put(relDocId + "#" + docid2, doc1.cosineSim(doc2));
             }
         }
@@ -113,17 +128,20 @@ class AllRelRcds {
     String qrelsFile;
     HashMap<String, PerQueryRelDocs> perQueryRels;
     int totalNumRel;
-    String indexPath;
+    IndexReader reader;
+    String cosineFile;
+    String mode;
 
-    public AllRelRcds(String qrelsFile, String indexPath) {
+    public AllRelRcds(String qrelsFile, IndexReader reader, String cosineFile, String mode) {
         this.qrelsFile = qrelsFile;
         perQueryRels = new HashMap<>();
         totalNumRel = 0;
-        this.indexPath = indexPath;
+        this.reader = reader;
+        this.cosineFile = cosineFile;
+        this.mode = mode;
     }
-  
 
-    void load() throws Exception {
+    void load(int startQid, int endQid) throws Exception {
         //  System.out.println(qrelsFile);
         FileReader fr = new FileReader(qrelsFile);
         BufferedReader br = new BufferedReader(fr);
@@ -135,26 +153,35 @@ class AllRelRcds {
 
         br.close();
         fr.close();
+
+        if (mode.equals("load")) {
+            loadCosineValue(cosineFile, startQid, endQid);
+        } else {
+            storeCosineSimilarity(cosineFile, startQid, endQid);
+        }
     }
 
-    void storeRelRcd(String line) throws IOException {
+    void storeRelRcd(String line) throws IOException, ParseException {
         String[] tokens = line.split("\\s+");
         String qid = tokens[0];
         PerQueryRelDocs relTuple = perQueryRels.get(qid);
         if (relTuple == null) {
-            relTuple = new PerQueryRelDocs(qid, indexPath);
+            relTuple = new PerQueryRelDocs(qid, reader);
             perQueryRels.put(qid, relTuple);
         }
         relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]));
     }
 
-    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo, String indexPath, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
-        FileWriter fw = new FileWriter(new File(fileName));
+    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo) throws IOException, ParseException {
+        FileWriter fw = new FileWriter(new File(fileName), true);
         BufferedWriter bw = new BufferedWriter(fw);
-        for (int qid = startQrelNo; qid < endQrelNo; qid++) {
-
-            PerQueryRelDocs perqd = perQueryRels.get(qid);
+        bw.newLine();
+        for (int qid = startQrelNo; qid <= endQrelNo; qid++) {
+            Integer qidString = qid;
+            PerQueryRelDocs perqd = perQueryRels.get(qidString.toString());
             perqd.precomputeCosineSim();
+            bw.write("#" + qidString.toString());
+            bw.newLine();
             Iterator it = perqd.perQuerydocCosineSim.keySet().iterator();
             while (it.hasNext()) {
                 String docPair = (String) it.next();
@@ -163,49 +190,54 @@ class AllRelRcds {
                 bw.newLine();
 
             }
-
+            System.out.println("done");
         }
         bw.close();
     }
 
-    public HashMap<Integer, HashMap<String, Double>> loadCosineValue(String fileName) throws FileNotFoundException, IOException {
+    public HashMap<Integer, HashMap<String, Double>> loadCosineValue(String fileName, int startQid, int endQid) throws FileNotFoundException, IOException {
         FileReader fr = new FileReader(new File(fileName));
         BufferedReader br = new BufferedReader(fr);
 
         String line = br.readLine();
         HashMap<Integer, HashMap<String, Double>> qidCosineMap = new HashMap<>();
-        String qid = "401";
-        HashMap<String, Double> h1 = new HashMap<>();
+        String qid = "";
+        HashMap<String,Double> h1= new HashMap();
         int flag = 0;
         int flag2 = 0;
         while (line != null) {
             if (line.startsWith("#")) {
                 if (flag != 0) {
-                    qidCosineMap.put(Integer.parseInt(qid), h1);
-                    h1 = new HashMap<>();
+                    System.out.println("fffffffffffff");
+                     perQueryRels.get(qid).perQuerydocCosineSim= h1;
+                    h1= new HashMap();
                     qid = line.substring(1, line.length());
                 } else {
                     qid = line.substring(1, line.length());
                     flag = 1;
+                    h1= new HashMap();
                 }
-                if (qid.equals("421")) {
+                if (qid.equals(endQid)) {
                     flag2 = 1;
                     break;
                 }
-                //   System.out.println(qid);
             } else {
-
-                String st[] = line.split(" ");
-                String docPair = st[0] + st[1];
-                h1.put(docPair, Double.parseDouble(st[2]));
-
+                try {
+                    String st[] = line.split(" ");
+                    // System.out.println(line);
+                    String docPair = st[0] + st[1];
+                    h1.put(docPair, Double.parseDouble(st[2]));
+                } catch (Exception e) {
+                    System.out.println(line);
+                }
             }
             if (flag2 == 1) {
                 break;
             }
             line = br.readLine();
-            //System.out.println(line);
         }
+        br.close();
+        System.out.println("done");
         return qidCosineMap;
     }
 
@@ -224,7 +256,6 @@ class AllRelRcds {
         return buff.toString();
     }
 
-   
 }
 
 class ResultTuple implements Comparable<ResultTuple> {
@@ -250,8 +281,7 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     List<ResultTuple> rtuples;
     int numRelRet;
     float avgP;
-    ArrayList<String>pool;
-    
+    ArrayList<String> pool;
 
     public RetrievedResults(String qid) throws IOException {
         this.qid = Integer.parseInt(qid);
@@ -259,7 +289,7 @@ class RetrievedResults implements Comparable<RetrievedResults> {
         avgP = -1;
         numRelRet = -1;
         pool = new ArrayList<>();
-       
+
     }
 
     void addTuple(String docName, int rank) {
@@ -285,7 +315,7 @@ class RetrievedResults implements Comparable<RetrievedResults> {
             Integer relIntObj = relInfo.relMap.get(rt.docName);
             rt.rel = relIntObj == null ? 0 : relIntObj.intValue();
         }
-       // this.relInfo = relInfo;
+        // this.relInfo = relInfo;
     }
 
     @Override
@@ -294,31 +324,6 @@ class RetrievedResults implements Comparable<RetrievedResults> {
     }
 }
 
-class AllRunRetrievedResults {
-
-    HashMap<String, AllRetrievedResults> allRunRetMap;
-    String runfileList;
-
-    public AllRunRetrievedResults(String runFileName, String location) throws FileNotFoundException, IOException {
-        this.runfileList = runFileName;
-        allRunRetMap = new HashMap<>();
-        FileReader fr = new FileReader(new File(runFileName));
-        BufferedReader br = new BufferedReader(fr);
-        String line = br.readLine();
-
-        while (line != null) {
-            String runFileLocation = location + "/" + line;
-            // System.out.println(runFileLocation);
-            AllRetrievedResults alr = new AllRetrievedResults(runFileLocation);
-            alr.load();
-            allRunRetMap.put(line, alr);
-            //System.out.println(line);
-            line = br.readLine();
-        }
-
-    }
-
-}
 
 class AllRetrievedResults {
 
@@ -354,7 +359,6 @@ class AllRetrievedResults {
         }
         res.addTuple(tokens[2], Integer.parseInt(tokens[3]));
         res.pool.add(tokens[2]);
-      //  System.out.println("hhh");
     }
 
     public String toString() {
@@ -366,72 +370,8 @@ class AllRetrievedResults {
         return buff.toString();
     }
 
-   
 }
-class MeanInferredAp {
 
-    HashMap<String, Double> meanInferApList;
-    ArrayList<String> runfileList;
-    int startQrelno;
-    int endQrelno;
-    double rmsError;
-
-    public MeanInferredAp(int startQrelno, int endQrelNo, String runFileName) throws FileNotFoundException, IOException {
-
-        this.startQrelno = startQrelno;
-        this.endQrelno = endQrelNo;
-
-        FileReader fr = new FileReader(runFileName);
-        BufferedReader br = new BufferedReader(fr);
-        String line = br.readLine();
-        runfileList = new ArrayList<>();
-
-        while (line != null) {
-            runfileList.add(line);
-            line = br.readLine();
-        }
-
-        meanInferApList = new HashMap<>();
-
-    }
-
-    public void computeMeanInferredAp(Properties prop, int percentage, int maxIter) throws Exception {
-
-        Evaluator eval = new Evaluator(prop);
-        String runFileLocation = prop.getProperty("runFileLocation");
-        AllRunRetrievedResults alr = new AllRunRetrievedResults(prop.getProperty("run.file"), runFileLocation);
-        eval.load();
-        for (int i = startQrelno; i <= endQrelno; i++) {
-            double sum = 0;
-            Integer h = i;
-            InferredAp iAp = new InferredAp(h.toString(), maxIter, "input.kdd8sh16", eval);
-            iAp.sampling(percentage);
-            eval.retRcds.resFile = runFileLocation + "/input.kdd8sh16";
-            eval.retRcds = alr.allRunRetMap.get(runFileLocation + "/input.kdd8sh16");
-            iAp.processRetrievedResult();
-            sum = iAp.computeInferredAp();
-            System.out.println("Qid No " + i + " Inferred Ap value " + sum);
-            meanInferApList.put(h.toString(), sum);//*/
-
-        }
-
-    }
-
-    public void storeMeanInferredAp(String FileName, ArrayList runFileList) throws IOException {
-        FileWriter fw = new FileWriter(new File(FileName));
-        BufferedWriter bw = new BufferedWriter(fw);
-
-        for (int count = 0; count < runFileList.size(); count++) {
-            Integer h = count;
-            Double infApValue = meanInferApList.get(runFileList.get(count));
-
-            bw.write(runFileList.get(count) + "  " + infApValue.toString());
-            bw.newLine();
-        }
-        bw.close();
-    }
-
-}
 
 class InferredApCalData {
 
@@ -449,7 +389,7 @@ class InferredApCalData {
 
 }
 
-class InferredAp {
+class InferredAp implements APComputer {
 
     PerQueryRelDocs reldocList;
     RetrievedResults retriveList;
@@ -459,16 +399,19 @@ class InferredAp {
     String qrelno;
     String runNo;
     HashSet reldoc;
+    IndexReader reader;
 
-    public InferredAp(String qrelString, int maxIter, String run, Evaluator eval) throws Exception {
+    public InferredAp(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage) throws Exception {
         this.qrelno = qrelString;
         this.maxIter = maxIter;
         sampledData = new HashSet<>();
         this.runNo = run;
         this.reldocList = eval.relRcds.perQueryRels.get(qrelString);
         this.retriveList = eval.retRcds.allRetMap.get(qrelString);
+        this.reader = reader;
         this.rankData = new HashMap<>();
-
+        sampling(percentage);
+        processRetrievedResult();
     }
 
     public void sampling(double percentage) {
@@ -538,8 +481,31 @@ class InferredAp {
         }
     }
 
-    public double computeInferredAp() {
+    public double computeInferredAp() throws IOException {
 
+        double sum = 0;
+        int numberofRecords = 0;
+
+        for (int i = 1; i < retriveList.rtuples.size(); i++) {
+            if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
+
+                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
+                        / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
+                numberofRecords++;
+            }
+        }
+        if (numberofRecords == 0) {
+            reader.close();
+            return 0;
+        } else {
+            reader.close();
+            return sum / numberofRecords;
+        }
+
+    }
+
+    @Override
+    public double evaluateAP() {
         double sum = 0;
         int numberofRecords = 0;
 
@@ -560,10 +526,46 @@ class InferredAp {
 
 }
 
-class InferredApKDE extends InferredAp {
+class InferredApKDE extends InferredAp implements APComputer {
 
-    public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval) throws Exception {
-        super(qrelString, maxIter, run, eval);
+    HashMap<String, Double> KDEValues;
+    static final double val = Math.sqrt(2 * 3.14);
+
+    public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage) throws Exception {
+        super(qrelString, maxIter, run, eval, reader, percentage);
+        KDEValues = computeKde(this.sampledData, this.retriveList.pool, this.reader, Integer.parseInt(this.qrelno), this.reldocList.perQuerydocCosineSim);
+    }
+
+    public HashMap<String, Double> computeKde(Set<String> judgedRel, ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> h3) throws IOException {
+        Iterator it = unjudged.iterator();
+        HashMap<String, Double> estmatedList = new HashMap<String, Double>();
+        double score = 0;
+        for (int i = 0; i < unjudged.size(); i++) {
+            String docid = unjudged.get(i);
+            score = 0;
+            String docidair = "";
+            double sim;
+            for (String docId2 : judgedRel) {
+
+                try {
+                    docidair = docid + docId2;
+                    sim = 0;
+                    if (h3.containsKey(docidair)) {
+                        sim = h3.get(docidair);
+
+                    }
+                    score += Math.exp(((1 - sim) * (1 - sim)) / 2);
+                } catch (Exception e) {
+                    sim = 0;
+                    score += Math.exp(((1 - sim) * (1 - sim)) / 2);
+                }
+            }
+            score = score / judgedRel.size();
+            score = score / val;
+            estmatedList.put(docid, score);
+        }
+
+        return estmatedList;
     }
 
     public double computeInferredAp(HashMap<String, Double> KDEValues) {
@@ -571,18 +573,17 @@ class InferredApKDE extends InferredAp {
         double sum = 0;
         int numberofRecords = 0;
         this.processRetrievedResult();
-       // System.out.println("gggg");
+        // System.out.println("gggg");
         for (int i = 1; i < retriveList.rtuples.size(); i++) {
-           
+
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
                 sum += (1 / (double) (i + 1));
-                 
+
                 for (int j = 0; j < i; j++) {
                     if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
                         try {
                             sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
                         } catch (Exception e) {
-                            //System.out.println(retriveList.rtuples.get(j).docName);
                         }
                     } else {
                         if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
@@ -604,36 +605,94 @@ class InferredApKDE extends InferredAp {
             return sum / numberofRecords;
         }
     }
-    
+
+    @Override
+    public double evaluateAP() {
+        double sum = 0;
+        int numberofRecords = 0;
+        for (int i = 1; i < retriveList.rtuples.size(); i++) {
+            if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
+                sum += (1 / (double) (i + 1));
+                for (int j = 0; j < i; j++) {
+                    if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
+                        try {
+                            sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
+                        } catch (Exception e) {
+
+                        }
+                    } else {
+                        if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
+                            sum += 0;
+                        }
+                    }
+                }
+                numberofRecords++;
+            }
+
+        }
+        if (numberofRecords == 0) {
+            return 0;
+        } else {
+            System.out.println(sum / numberofRecords);
+            return sum / numberofRecords;
+        }
+    }
+
 }
 
+interface APComputer {
 
+    double evaluateAP();
+}
 
 public class Evaluator {
 
     AllRelRcds relRcds;
     AllRetrievedResults retRcds;
+    int startQid;
+    int endQid;
+    HashMap<Integer, Double> qidApMap;
+    double MeanAp;
+    IndexReader reader;
+    String mode;
+    String cosineSimilarityFile;
 
-    public Evaluator(String qrelsFile, String resFile, String indexPath) {
-        relRcds = new AllRelRcds(qrelsFile, indexPath);
+    public Evaluator(String qrelsFile, String resFile, String indexPath, String mode, String cosineSimilarityFile) throws IOException {
+        reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
+        mode = this.mode;
+        relRcds = new AllRelRcds(qrelsFile, reader, cosineSimilarityFile, mode);
         retRcds = new AllRetrievedResults(resFile);
+        qidApMap = new HashMap<>();
     }
 
-    public Evaluator(Properties prop) {
-
+    public Evaluator(Properties prop) throws Exception {
         String qrelsFile = prop.getProperty("qrels.file");
         String resFile = prop.getProperty("res.file");
-        String indexPath = prop.getProperty("index.file");
-        relRcds = new AllRelRcds(qrelsFile, indexPath);
+        mode = prop.getProperty("mode");
+        reader = DirectoryReader.open(FSDirectory.open(new File(prop.getProperty("index.file"))));
+        relRcds = new AllRelRcds(qrelsFile, reader, prop.getProperty("cosine.file"), mode);
         retRcds = new AllRetrievedResults(resFile);
+        startQid = Integer.parseInt(prop.getProperty("qid.start"));
+        endQid = Integer.parseInt(prop.getProperty("qid.end"));
+        qidApMap = new HashMap<>();
     }
 
     public void load() throws Exception {
-        relRcds.load();
+        relRcds.load(startQid, endQid);
         retRcds.load();
     }
 
-   
+    public void evaluateQueries(double percentage) throws Exception {
+        double sum = 0;
+        for (int qid = startQid; qid < endQid; qid++) {
+            Integer h = qid;
+            InferredApKDE iapk = new InferredApKDE(h.toString(), 5, "", this, reader, percentage);
+            sum += iapk.evaluateAP();
+        }
+        sum /= (endQid - startQid + 1);
+        System.out.println(sum);
+        reader.close();
+    }
 
     @Override
     public String toString() {
@@ -651,43 +710,9 @@ public class Evaluator {
         try {
             Properties prop = new Properties();
             prop.load(new FileReader(args[0]));
-
-            String qrelsFile = prop.getProperty("qrels.file");
-            String resFile = prop.getProperty("res.file");
-            String runFileList = prop.getProperty("run.file");
-            String indexPath = prop.getProperty("index.file");
-            String runFileLocation = prop.getProperty("runFileLocation");
-            String mode = prop.getProperty("mode");
-          /*  if (mode.equals("")) {
-            } else {
-
-            }*/
-            IndexReader reader = DirectoryReader.open(FSDirectory.open(new File("/media/procheta/3CE80E12E80DCADA/newIndex2")));
-            
-            Evaluator evaluator = new Evaluator(qrelsFile, resFile, indexPath);
+            Evaluator evaluator = new Evaluator(prop);
             evaluator.load();
-            //  evaluator.storeCosineSimilarity(401, 450, evaluator, "input.kdd8sh16", "/home/procheta/Documents/Store2.txt", reader);
-           // MeanInferredAp meanInAp = new MeanInferredAp(401, 450, runFileList);
-
-            HashMap<Integer, HashMap<String, Double>> h1 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store.txt");
-            HashMap<Integer, HashMap<String, Double>> h2 = evaluator.relRcds.loadCosineValue("/home/procheta/Documents/Store1.txt");
-
-            reader.close();
-            KDEImplementation kdei = new KDEImplementation();
-        //    System.out.println(evaluator.retRcds.allRetMap.get("401").pool);
-            InferredAp iap = new InferredAp("401", 5, mode, evaluator);
-          //  System.out.println(iap.retriveList.pool);
-           // System.out.println(new InferredAp(qrelsFile, 5, mode, evaluator).retriveList.pool);
-        //   kdei.calculateKde(new InferredAp("401", 5, mode, evaluator).sampledData, new InferredAp(qrelsFile, 5, mode, evaluator).retriveList.pool, reader,401, h1, h2);
-           InferredApKDE iak = new InferredApKDE("401", 5, "input.kdd8sh16", evaluator);
-           iak.sampling(.30);
-           
-          // kdei.calculateKde(iak.sampledData, iak.retriveList.pool, reader, 401, h1, h2);
-            iak.computeInferredAp( kdei.calculateKde(iak.sampledData, iak.retriveList.pool, reader, 401, h1, h2));
-
-            //meanInferredAp meanInAp = new meanInferredAp(401, 450, runFileList);
-            // meanInAp.computeMeanInferredApKDE(prop, .30, 5, "input.kdd8sh16", h1, h2, evaluator);
-
+            evaluator.evaluateQueries(.30);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
