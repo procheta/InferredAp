@@ -43,7 +43,7 @@ public class DocVector {
     String docid;
     public ArrayList<TermFreq> termVector;
 
-    public DocVector(String docid,IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
+    public DocVector(String docid, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         this.docid = docid;
         this.termVector = new ArrayList<TermFreq>();
         Analyzer analyzer = new KeywordAnalyzer();
@@ -61,50 +61,75 @@ public class DocVector {
 
             TermFreq tf = new TermFreq(term.utf8ToString(), (int) termsEnum.totalTermFreq());
             this.termVector.add(tf);
-        }        
+        }
 
     }
 
     public double cosineSim(DocVector d) {
         int j = 0;
-        int firstsquaredLength = 0;
-        int secondsquaredLength = 0;
+        double firstsquaredLength = 0;
+        double secondsquaredLength = 0;
         double freqSum = 0;
-        for (int i = 0; i < termVector.size(); i++) {
-            
-            int compareToValue = termVector.get(i).term.compareTo(d.termVector.get(j).term);
-            if (compareToValue > 0) {
-                if (j < d.termVector.size()) {
-                    j++;
-                    firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
-                }
-            }
-            if (compareToValue< 0) {
-                if (j < d.termVector.size()) {
-                    i++;
-                    secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
-                }
-            }
+        int i = 0;
+        while (i < termVector.size()) {
 
-            if (compareToValue == 0) {
+             if(i != termVector.size() && j!= d.termVector.size())
+            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) > 0) {
+                if (j < d.termVector.size()) {
+                    secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
+                    j++;
+                }
+            }
+             if(i != termVector.size() && j!= d.termVector.size())
+            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) < 0) {
+                if (i < termVector.size()) {
+                    firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
+
+                    i++;
+                }
+            }
+            if(i != termVector.size() && j!= d.termVector.size())
+            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) == 0) {
                 freqSum += d.termVector.get(j).freq * termVector.get(i).freq;
                 if (j < d.termVector.size()) {
+                    secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
                     j++;
                 }
-                if (j == d.termVector.size()) {
-                    break;
+                if (i < termVector.size()) {
+                    firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
+                    i++;
                 }
-                secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
-                firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
-
             }
-
             if (j == d.termVector.size()) {
-                break;
-            }
+               // break;
+                for(int k = i; k < termVector.size();k++)
+                {
+                     firstsquaredLength = firstsquaredLength + termVector.get(k).freq * termVector.get(k).freq;
+                  
+                }
+                i = termVector.size();
+            }      
+
+        
+    }
+        if(j < d.termVector.size())
+        {
+             for(int k = j; k < d.termVector.size();k++)
+                {
+                    secondsquaredLength = secondsquaredLength + d.termVector.get(k).freq * d.termVector.get(k).freq;
+                      
+                }
         }
 
-        return freqSum / (Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength));
+    double f = freqSum / (Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength));
+
+    if(Double.isNaN (f))
+            {
+                System.out.println((Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength)));
+
+    }
+       // System.out.println(freqSum/ (Math.sqrt (firstsquaredLength)* Math.sqrt(secondsquaredLength)));
+    return freqSum/ (Math.sqrt (firstsquaredLength)* Math.sqrt(secondsquaredLength));
     }
 
 }
