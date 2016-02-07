@@ -45,6 +45,7 @@ public class DocVector {
 
     public DocVector(String docid,IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         this.docid = docid;
+        this.termVector = new ArrayList<TermFreq>();
         Analyzer analyzer = new KeywordAnalyzer();
         QueryParser parser = new QueryParser(Version.LUCENE_CURRENT, "id", analyzer);
         Query query = parser.parse(docid);
@@ -60,9 +61,7 @@ public class DocVector {
 
             TermFreq tf = new TermFreq(term.utf8ToString(), (int) termsEnum.totalTermFreq());
             this.termVector.add(tf);
-        }
-
-        reader.close();
+        }        
 
     }
 
