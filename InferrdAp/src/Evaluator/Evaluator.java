@@ -483,30 +483,7 @@ class InferredAp implements APComputer {
         }
     }
 
-    public double computeInferredAp() throws IOException {
-
-        double sum = 0;
-        int numberofRecords = 0;
-
-        for (int i = 1; i < retriveList.rtuples.size(); i++) {
-            if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-
-                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
-                        / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
-                numberofRecords++;
-            }
-        }
-        if (numberofRecords == 0) {
-            reader.close();
-            return 0;
-        } else {
-            reader.close();
-            return sum / numberofRecords;
-        }
-
-    }
-
-    @Override
+   @Override
     public double evaluateAP() {
         double sum = 0;
         int numberofRecords = 0;
@@ -574,44 +551,7 @@ class InferredApKDE extends InferredAp implements APComputer {
         return estmatedList;
     }
 
-    public double computeInferredAp(HashMap<String, Double> KDEValues) {
-
-        double sum = 0;
-        int numberofRecords = 0;
-        this.processRetrievedResult();
-        // System.out.println("gggg");
-        for (int i = 1; i < retriveList.rtuples.size(); i++) {
-
-            if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-                sum += (1 / (double) (i + 1));
-
-                for (int j = 0; j < i; j++) {
-                    if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
-                        try {
-                            sum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
-                        } catch (Exception e) {
-                        }
-                    } else {
-                        if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-
-                            sum += 0;
-                        }
-                    }
-                }
-
-                numberofRecords++;
-
-            }
-
-        }
-        if (numberofRecords == 0) {
-            return 0;
-        } else {
-            System.out.println(sum / numberofRecords);
-            return sum / numberofRecords;
-        }
-    }
-
+  
     @Override
     public double evaluateAP() {
         double sum = 0;
