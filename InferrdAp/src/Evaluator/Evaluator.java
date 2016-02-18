@@ -239,6 +239,8 @@ class AllRelRcds {
         }
         br.close();
         perQueryRels.get(qid).perQuerydocCosineSim = h1;
+
+        // return qidCosineMap;
     }
 
     public String toString() {
@@ -337,7 +339,7 @@ class AllRetrievedResults {
 
     public void load() {
         String line;
-
+       // System.out.println(resFile);
         try (FileReader fr = new FileReader(resFile);
                 BufferedReader br = new BufferedReader(fr);) {
             while ((line = br.readLine()) != null) {
@@ -346,6 +348,7 @@ class AllRetrievedResults {
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+        
     }
 
     void storeRetRcd(String line) throws IOException {
@@ -421,8 +424,9 @@ class InferredAp implements APComputer {
         int rel_exists = 0;
         int irrel_exists = 0;
         int count = 0;
-        // System.out.println(pool.size());
+     //    System.out.println("Relevant Document "+reldocList.relMap.size());
         int sampleSize = (int) (pool.size() * percentage);
+        //System.out.println(sampleSize);
         while (iter < maxIter) {
 
             count = 0;
@@ -452,26 +456,24 @@ class InferredAp implements APComputer {
         int r = 0;
         int n = 0;
         int d = 0;
+      
         for (int i = 0; i < retriveList.rtuples.size(); i++) {
-            if (sampledData.contains(retriveList.rtuples.get(i).docName) && reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName)) {
+           //  System.out.println(retriveList.rtuples.get(i).docName);
+            if (sampledData.contains(retriveList.rtuples.get(i).docName) && reldoc.contains(retriveList.rtuples.get(i).docName)) {
+               
                 r++;
-
+                d++;
                 rankData.put(i, new InferredApCalData(r, n, d));
 
             } else if (sampledData.contains(retriveList.rtuples.get(i).docName) && reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName)) {
-
+                d++;
                 n++;
                 rankData.put(i, new InferredApCalData(r, n, d));
 
-            } else {
-                if (!reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName) && !reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName)) {
-                    d++;
-                }
-                rankData.put(i, new InferredApCalData(r, n, d));
-
-            }
-
+            } 
+          //  System.out.println("R " + r + " N" + n + "D " + d);
         }
+       
     }
 
     @Override
@@ -492,8 +494,11 @@ class InferredAp implements APComputer {
         if (numberofRecords == 0) {
             return 0;
         } else {
+          //  System.out.println(numberofRecords);
+          //  System.out.println(sum / numberofRecords);
             return sum / numberofRecords;
         }
+       
     }
 
 }
@@ -510,7 +515,7 @@ class InferredApKDE extends InferredAp implements APComputer {
         super(qrelString, maxIter, run, eval, reader, percentage);
         KDEValues = computeKde(this.sampledData, this.retriveList.pool, this.reader, Integer.parseInt(this.qrelno), this.reldocList.perQuerydocCosineSim);
         this.h = h;
-        this.sigma = sigma;
+        sigma = this.sigma;
     }
 
     public HashMap<String, Double> computeKde(Set<String> judgedRel, ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> docPairCosineMap) throws IOException {
@@ -605,6 +610,8 @@ class EvaluateAll extends Evaluator {
         while (line != null) {
 
             retRcds.resFile = runFileFolderPath + "/" + line;
+           // System.out.println(retRcds.resFile );
+            retRcds.allRetMap = new TreeMap<>();
             retRcds.load();
             double apValue = evaluateQueries(.30);
             System.out.println(apValue);
@@ -660,7 +667,7 @@ public class Evaluator {
     String mode;
     String cosineSimilarityFile;
     Properties prop;
-    String infAPMethod;
+    String flag;
     double h;
     double sigma;
 
@@ -671,9 +678,14 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
         qidApMap = new HashMap<>();
         this.prop = prop;
-        infAPMethod = prop.getProperty("infap.method", "inf");  // can be either inf or kdeinf
-        h = Double.parseDouble(prop.getProperty("h"));
-        sigma = Double.parseDouble(prop.getProperty("sigma"));
+        flag = prop.getProperty("flag");
+        if (flag.equals("1")) {
+            h = Double.parseDouble(prop.getProperty("h"));
+            sigma = Double.parseDouble(prop.getProperty("sigma"));
+        } else {
+            h = -1;
+            sigma = -1;
+        }
     }
 
     public Evaluator(Properties prop) throws Exception {
@@ -686,25 +698,27 @@ public class Evaluator {
         startQid = Integer.parseInt(prop.getProperty("qid.start"));
         endQid = Integer.parseInt(prop.getProperty("qid.end"));
         qidApMap = new HashMap<>();
-        infAPMethod = prop.getProperty("infap.method", "inf");  // can be either inf or kdeinf
+        flag = prop.getProperty("flag");
         this.prop = prop;
     }
 
     public void load() throws Exception {
         relRcds.load(startQid, endQid);
         retRcds.load();
+        System.out.println(relRcds.perQueryRels.size());
     }
 
-    public APComputer createAPEvaluator(String qid, int maxIter, double percentage) throws Exception {
+    public APComputer createAPEvaluator(String qid,int maxIter,double percentage) throws Exception {
         APComputer iapk;
-        if (infAPMethod.equals("kdeinf")) {
+        if (flag.equals("1")) {
             iapk = new InferredApKDE(qid, maxIter, "", this, reader, percentage, h, sigma);
-        }
-		else {
+        } else {
             iapk = new InferredAp(qid, maxIter, "", this, reader, percentage);
+            
         }
 
         return iapk;
+
     }
 
     public double evaluateQueries(double percentage) throws Exception {
