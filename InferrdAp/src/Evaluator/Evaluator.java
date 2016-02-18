@@ -205,7 +205,7 @@ class AllRelRcds {
         int flag3 = 0;
         Integer start = startQid;
         Integer end = endQid;
-       while (line != null) {
+        while (line != null) {
             if (line.startsWith("#")) {
                 if (flag != 0) {
                     perQueryRels.get(qid).perQuerydocCosineSim = h1;
@@ -240,7 +240,7 @@ class AllRelRcds {
         br.close();
         perQueryRels.get(qid).perQuerydocCosineSim = h1;
 
-       // return qidCosineMap;
+        // return qidCosineMap;
     }
 
     public String toString() {
@@ -439,12 +439,10 @@ class InferredAp implements APComputer {
                 if (reldocList.irrelMap.containsKey(pool.get(random))) {
                     irrel_exists = 1;
                 }
-
                 count++;
             }
 
             if (rel_exists == 1 && irrel_exists == 1) {
-
                 break;
             }
 
@@ -504,11 +502,15 @@ class InferredApKDE extends InferredAp implements APComputer {
 
     HashMap<String, Double> KDEValues;
     static final double val = Math.sqrt(2 * 3.14);
+    double h;
+    double sigma;
 
-    public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage) throws Exception {
+    public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage, double h, double sigma) throws Exception {
 
         super(qrelString, maxIter, run, eval, reader, percentage);
         KDEValues = computeKde(this.sampledData, this.retriveList.pool, this.reader, Integer.parseInt(this.qrelno), this.reldocList.perQuerydocCosineSim);
+        h = this.h;
+        sigma = this.sigma;
     }
 
     public HashMap<String, Double> computeKde(Set<String> judgedRel, ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> docPairCosineMap) throws IOException {
@@ -540,7 +542,6 @@ class InferredApKDE extends InferredAp implements APComputer {
 
             estmatedList.put(docid, score);
         }
-
         return estmatedList;
     }
 
@@ -593,10 +594,9 @@ class EvaluateAll extends Evaluator {
         super(prop);
         runApMap = new HashMap<>();
         this.runFileList = prop.getProperty("run.file");
-        this.resultFolderPath =  prop.getProperty("resultFolderLocation");
+        this.resultFolderPath = prop.getProperty("resultFolderLocation");
         this.runFileFolderPath = prop.getProperty("runfileFolderLocation");
     }
-   
 
     public void computeMeanAp() throws FileNotFoundException, Exception {
         FileReader fr = new FileReader(new File(runFileList));
@@ -604,13 +604,13 @@ class EvaluateAll extends Evaluator {
         String line = br.readLine();
         while (line != null) {
 
-            retRcds.resFile =  runFileFolderPath + "/" + line;
+            retRcds.resFile = runFileFolderPath + "/" + line;
             retRcds.load();
             double apValue = evaluateQueries(.30);
             System.out.println(apValue);
             runApMap.put(line, apValue);
             line = br.readLine();
-            
+
         }
         br.close();
     }
@@ -624,7 +624,7 @@ class EvaluateAll extends Evaluator {
         while (it.hasNext()) {
             String run = (String) it.next();
             bw.write(run + " " + runApMap.get(run));
-           // System.out.println(runApMap.get(run));
+            // System.out.println(runApMap.get(run));
             bw.newLine();
         }
 
@@ -636,9 +636,9 @@ class EvaluateAll extends Evaluator {
         BufferedReader br = new BufferedReader(fr);
         String line = br.readLine();
         while (line != null) {
-            retRcds.resFile =  runFileFolderPath +"/"+ line;
+            retRcds.resFile = runFileFolderPath + "/" + line;
             retRcds.load();
-            String storeFileName = resultFolderPath+ "/" + line;
+            String storeFileName = resultFolderPath + "/" + line;
             double apValue = evaluateQueries(.30);
             storeApValues(storeFileName);
             line = br.readLine();
@@ -659,13 +659,29 @@ public class Evaluator {
     IndexReader reader;
     String mode;
     String cosineSimilarityFile;
+    Properties prop;
+    String flag;
+    double h;
+    double sigma;
 
-    public Evaluator(String qrelsFile, String resFile, String indexPath, String mode, String cosineSimilarityFile) throws IOException {
+    public Evaluator(String qrelsFile, String resFile, String indexPath, String mode, String cosineSimilarityFile, Properties prop) throws IOException {
         reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
         mode = this.mode;
         relRcds = new AllRelRcds(qrelsFile, reader, cosineSimilarityFile, mode);
         retRcds = new AllRetrievedResults(resFile);
         qidApMap = new HashMap<>();
+        this.prop = prop;
+        flag = prop.getProperty("flag");
+        if(flag.equals("1"))
+        {
+            h = Double.parseDouble(prop.getProperty("h"));
+            sigma = Double.parseDouble(prop.getProperty("sigma"));
+        }
+        else
+        {
+            h = -1;
+            sigma = -1;
+        }
     }
 
     public Evaluator(Properties prop) throws Exception {
@@ -678,6 +694,8 @@ public class Evaluator {
         startQid = Integer.parseInt(prop.getProperty("qid.start"));
         endQid = Integer.parseInt(prop.getProperty("qid.end"));
         qidApMap = new HashMap<>();
+        flag = prop.getProperty("flag");
+        this.prop = prop;
     }
 
     public void load() throws Exception {
@@ -687,11 +705,17 @@ public class Evaluator {
 
     public double evaluateQueries(double percentage) throws Exception {
         double sum = 0;
-
+        APComputer iapk;
         for (int qid = startQid; qid <= endQid; qid++) {
             Integer h = qid;
-            InferredApKDE iapk = new InferredApKDE(h.toString(), 5, "", this, reader, percentage);
-            double g = iapk.evaluateAP();
+            double g;
+            if (flag.equals("1")) {
+                iapk = new InferredApKDE(h.toString(), 5, "", this, reader, percentage, h,sigma);
+                g = iapk.evaluateAP();
+            } else {
+                iapk = new InferredAp(h.toString(), 5, "", this, reader, percentage);
+                g = iapk.evaluateAP();
+            }
             sum += g;
             Double h1;
             qidApMap.put(qid, g);
@@ -738,7 +762,7 @@ public class Evaluator {
             eval.load();
             eval.computeMeanAp();
             eval.storeRunMeanAp(prop.getProperty("storeMeanAp"));
-           // eval.storeRunQid();
+            // eval.storeRunQid();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
