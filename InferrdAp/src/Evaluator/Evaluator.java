@@ -153,7 +153,7 @@ class AllRelRcds {
 
         if (mode.equals("load")) {
             loadCosineValue(cosineFile, startQid, endQid);
-        } else {
+        } else   if (mode.equals("store")) {
             storeCosineSimilarity(cosineFile, startQid, endQid);
         }
     }
@@ -481,11 +481,13 @@ class InferredAp implements APComputer {
         double sum = 0;
         int numberofRecords = 0;
 
-        for (int i = 1; i < retriveList.rtuples.size(); i++) {
+        for (int i = 0 ; i < retriveList.rtuples.size(); i++) {
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-
-                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).relDocNo / (double) (i)) * ((rankData.get(i).irrelDocNo + .01)
-                        / (rankData.get(i).irrelDocNo + rankData.get(i).dValue + 2 * .01));
+                if(i != 0)
+                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).dValue / (double) (i)) * ((rankData.get(i).relDocNo + .01)
+                        / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01));
+                else
+                    sum += (1 / (double) (i + 1));
                 numberofRecords++;
             }
         }
