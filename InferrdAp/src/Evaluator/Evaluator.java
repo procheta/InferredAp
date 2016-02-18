@@ -239,8 +239,6 @@ class AllRelRcds {
         }
         br.close();
         perQueryRels.get(qid).perQuerydocCosineSim = h1;
-
-        // return qidCosineMap;
     }
 
     public String toString() {
@@ -511,8 +509,8 @@ class InferredApKDE extends InferredAp implements APComputer {
 
         super(qrelString, maxIter, run, eval, reader, percentage);
         KDEValues = computeKde(this.sampledData, this.retriveList.pool, this.reader, Integer.parseInt(this.qrelno), this.reldocList.perQuerydocCosineSim);
-        h = this.h;
-        sigma = this.sigma;
+        this.h = h;
+        this.sigma = sigma;
     }
 
     public HashMap<String, Double> computeKde(Set<String> judgedRel, ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> docPairCosineMap) throws IOException {
@@ -662,7 +660,7 @@ public class Evaluator {
     String mode;
     String cosineSimilarityFile;
     Properties prop;
-    String flag;
+    String infAPMethod;
     double h;
     double sigma;
 
@@ -673,14 +671,9 @@ public class Evaluator {
         retRcds = new AllRetrievedResults(resFile);
         qidApMap = new HashMap<>();
         this.prop = prop;
-        flag = prop.getProperty("flag");
-        if (flag.equals("1")) {
-            h = Double.parseDouble(prop.getProperty("h"));
-            sigma = Double.parseDouble(prop.getProperty("sigma"));
-        } else {
-            h = -1;
-            sigma = -1;
-        }
+        infAPMethod = prop.getProperty("infap.method", "inf");  // can be either inf or kdeinf
+        h = Double.parseDouble(prop.getProperty("h"));
+        sigma = Double.parseDouble(prop.getProperty("sigma"));
     }
 
     public Evaluator(Properties prop) throws Exception {
@@ -693,7 +686,7 @@ public class Evaluator {
         startQid = Integer.parseInt(prop.getProperty("qid.start"));
         endQid = Integer.parseInt(prop.getProperty("qid.end"));
         qidApMap = new HashMap<>();
-        flag = prop.getProperty("flag");
+        infAPMethod = prop.getProperty("infap.method", "inf");  // can be either inf or kdeinf
         this.prop = prop;
     }
 
@@ -702,16 +695,16 @@ public class Evaluator {
         retRcds.load();
     }
 
-    public APComputer createAPEvaluator(String qid,int maxIter,double percentage) throws Exception {
+    public APComputer createAPEvaluator(String qid, int maxIter, double percentage) throws Exception {
         APComputer iapk;
-        if (flag.equals("1")) {
+        if (infAPMethod.equals("kdeinf")) {
             iapk = new InferredApKDE(qid, maxIter, "", this, reader, percentage, h, sigma);
-        } else {
+        }
+		else {
             iapk = new InferredAp(qid, maxIter, "", this, reader, percentage);
         }
 
         return iapk;
-
     }
 
     public double evaluateQueries(double percentage) throws Exception {
