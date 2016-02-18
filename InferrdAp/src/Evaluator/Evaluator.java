@@ -672,13 +672,10 @@ public class Evaluator {
         qidApMap = new HashMap<>();
         this.prop = prop;
         flag = prop.getProperty("flag");
-        if(flag.equals("1"))
-        {
+        if (flag.equals("1")) {
             h = Double.parseDouble(prop.getProperty("h"));
             sigma = Double.parseDouble(prop.getProperty("sigma"));
-        }
-        else
-        {
+        } else {
             h = -1;
             sigma = -1;
         }
@@ -703,19 +700,26 @@ public class Evaluator {
         retRcds.load();
     }
 
+    public APComputer createAPEvaluator(String qid,int maxIter,double percentage) throws Exception {
+        APComputer iapk;
+        if (flag.equals("1")) {
+            iapk = new InferredApKDE(qid, maxIter, "", this, reader, percentage, h, sigma);
+        } else {
+            iapk = new InferredAp(qid, maxIter, "", this, reader, percentage);
+        }
+
+        return iapk;
+
+    }
+
     public double evaluateQueries(double percentage) throws Exception {
         double sum = 0;
         APComputer iapk;
         for (int qid = startQid; qid <= endQid; qid++) {
             Integer h = qid;
             double g;
-            if (flag.equals("1")) {
-                iapk = new InferredApKDE(h.toString(), 5, "", this, reader, percentage, h,sigma);
-                g = iapk.evaluateAP();
-            } else {
-                iapk = new InferredAp(h.toString(), 5, "", this, reader, percentage);
-                g = iapk.evaluateAP();
-            }
+            iapk = createAPEvaluator(h.toString(), 5, percentage);
+            g = iapk.evaluateAP();
             sum += g;
             Double h1;
             qidApMap.put(qid, g);
