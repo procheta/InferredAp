@@ -470,7 +470,15 @@ class InferredAp implements APComputer {
                 n++;
                 rankData.put(i, new InferredApCalData(r, n, d));
 
-            } 
+            }
+           else
+            {
+                if(reldocList.irrelMap.containsKey(retriveList.rtuples.get(i).docName) || reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))
+                {
+                    d++;
+                    rankData.put(i, new InferredApCalData(r, n, d));
+                }
+            }
           //  System.out.println("R " + r + " N" + n + "D " + d);
         }
        
@@ -484,19 +492,32 @@ class InferredAp implements APComputer {
         for (int i = 0 ; i < retriveList.rtuples.size(); i++) {
             if (sampledData.contains(retriveList.rtuples.get(i).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
                 if(i != 0)
-                sum += (1 / (double) (i + 1)) + ((i) / (double) (i + 1)) * (rankData.get(i).dValue / (double) (i)) * ((rankData.get(i).relDocNo + .01)
-                        / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01));
+                sum += (1 / (double) (i + 1)) + (i  / (double) (i + 1)) * (rankData.get(i).dValue / (double) (i)) * ((rankData.get(i).relDocNo + .01)
+                      / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01));
                 else
                     sum += (1 / (double) (i + 1));
-                numberofRecords++;
+              //  numberofRecords++;
+               // System.out.println("hhhh "+sum);
+                
             }
         }
+            Iterator it = sampledData.iterator();
+            while(it.hasNext())
+            {
+                String st = (String) it.next();
+                if(reldocList.relMap.containsKey(st))
+                    numberofRecords++;
+            
+            
+            }
+        
         if (numberofRecords == 0) {
             return 0;
         } else {
-          //  System.out.println(numberofRecords);
-          //  System.out.println(sum / numberofRecords);
-            return sum / numberofRecords;
+          // System.out.println("NOR "+numberofRecords);
+           // System.out.println("Sum "+ sum);
+          // System.out.println(sum / sampledData.size());
+            return sum /  numberofRecords;
         }
        
     }
@@ -614,7 +635,7 @@ class EvaluateAll extends Evaluator {
             retRcds.allRetMap = new TreeMap<>();
             retRcds.load();
             double apValue = evaluateQueries(.30);
-            System.out.println(apValue);
+            System.out.println("Apvalue "+apValue);
             runApMap.put(line, apValue);
             line = br.readLine();
 
@@ -731,12 +752,12 @@ public class Evaluator {
             g = iapk.evaluateAP();
             sum += g;
             Double h1;
-            qidApMap.put(qid, g);
+            qidApMap.put(qid,g);
 
         }
         sum /= (endQid - startQid + 1);
 
-        //System.out.println(sum);
+        //System.out.println(sum+"hhh");
         reader.close();
         return sum;
     }
@@ -774,6 +795,7 @@ public class Evaluator {
             EvaluateAll eval = new EvaluateAll(prop);
             eval.load();
             eval.computeMeanAp();
+           // System.out.println("mmm");
             eval.storeRunMeanAp(prop.getProperty("storeMeanAp"));
             // eval.storeRunQid();
         } catch (Exception ex) {
