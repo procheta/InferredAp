@@ -391,6 +391,7 @@ class AveragePrecision implements APComputer {
         this.retriveList = eval.retRcds.allRetMap.get(qrelString);
         this.reader = reader;
         this.rankData = new HashMap<>();
+        this.reldoc = new HashSet();       
 
     }
 
@@ -417,25 +418,18 @@ class AveragePrecision implements APComputer {
 
     @Override
     public double evaluateAP() {
+         processRetrievedResult();
         double sum = 0;
         int numberofRecords = 0;
-
         for (int i = 0; i < retriveList.rtuples.size(); i++) {
             if ((reldocList.relMap.containsKey(retriveList.rtuples.get(i).docName))) {
-                if (i != 0) {
-                    sum += (rankData.get(i).relDocNo + .01) / (rankData.get(i).irrelDocNo + rankData.get(i).relDocNo + 2 * .01);
-                } else {
-                    sum += (1 / (double) (i + 1));
-                }
-                numberofRecords++;
+                sum += (double) (rankData.get(i).relDocNo) / (double) (i + 1);
+
             }
         }
 
-        if (numberofRecords == 0) {
-            return 0;
-        } else {
-            return sum / numberofRecords;
-        }
+        return sum / reldocList.relMap.size();
+
     }
 
 }
@@ -462,13 +456,14 @@ class InferredAp extends AveragePrecision implements APComputer {
     HashMap<Integer, ApCalData> rankData;
     String samplingMode;
 
-    public InferredAp(String qrelString, int maxIter, String run,Evaluator eval, IndexReader reader, double percentage) throws Exception {
+    public InferredAp(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage) throws Exception {
         super(qrelString, run, eval, reader);
         this.maxIter = maxIter;
         sampledData = new HashSet<>();
         rankData = new HashMap<Integer, ApCalData>();
         this.samplingMode = eval.samplingMode;
         if (samplingMode.equals("load")) {
+           
             loadsampling(eval.samplingFileName);
         } else {
             sampling(percentage);
@@ -515,7 +510,7 @@ class InferredAp extends AveragePrecision implements APComputer {
     }
 
     public void loadsampling(String FileName) throws FileNotFoundException, IOException {
-
+        
         FileReader fr = new FileReader(FileName);
         BufferedReader br = new BufferedReader(fr);
         int startflag = 0;
@@ -526,7 +521,7 @@ class InferredAp extends AveragePrecision implements APComputer {
             if (st[0].equals(qrelno)) {
                 startflag = 1;
             }
-            if (startflag == 0 && !st[0].equals(qrelno)) {
+            if (startflag == 1 && !st[0].equals(qrelno)) {
                 break;
             }
 
@@ -539,7 +534,7 @@ class InferredAp extends AveragePrecision implements APComputer {
             line = br.readLine();
         }
         br.close();
-
+        // System.out.println(sampledData);
     }
 
     public void processRetrievedResult() {
@@ -702,7 +697,6 @@ class EvaluateAll extends Evaluator {
     HashMap<String, Double> runApMap;
     String resultFolderPath;
     String runFileFolderPath;
-   
 
     public EvaluateAll(Properties prop) throws IOException, Exception {
         super(prop);
@@ -710,7 +704,7 @@ class EvaluateAll extends Evaluator {
         this.runFileList = prop.getProperty("run.file");
         this.resultFolderPath = prop.getProperty("resultFolderLocation");
         this.runFileFolderPath = prop.getProperty("runfileFolderLocation");
-        
+
     }
 
     public void computeMeanAp() throws FileNotFoundException, Exception {
@@ -725,6 +719,7 @@ class EvaluateAll extends Evaluator {
             retRcds.load();
             double apValue = evaluateQueries(.30);
             System.out.println("Apvalue " + apValue);
+            // System.out.println(apValue);
             runApMap.put(line, apValue);
             line = br.readLine();
 
@@ -780,8 +775,8 @@ public class Evaluator {
     String flag;
     double h;
     double sigma;
-     String samplingMode;
-     String samplingFileName;
+    String samplingMode;
+    String samplingFileName;
 
     public Evaluator(String qrelsFile, String resFile, String indexPath, String mode, String cosineSimilarityFile, Properties prop) throws IOException {
         reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
@@ -798,6 +793,8 @@ public class Evaluator {
             h = -1;
             sigma = -1;
         }
+        this.samplingMode = prop.getProperty("samplingMode");
+        this.samplingFileName = prop.getProperty("samplingFileName");
     }
 
     public Evaluator(Properties prop) throws Exception {
@@ -845,6 +842,7 @@ public class Evaluator {
             double g;
             iapk = createAPEvaluator(h.toString(), 5, percentage);
             g = iapk.evaluateAP();
+            //System.out.println(g);
             sum += g;
             Double h1;
             qidApMap.put(qid, g);
