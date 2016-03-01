@@ -654,47 +654,29 @@ class InferredApKDE extends InferredAp implements APComputer {
         sigma = this.sigma;
     }
 
+	//+++Debasis: I've cleaned up this function. Please stick to this cleanliness for the rest
+	//of the functions...
     public HashMap<String, Double> computeKde(Set<String> judgedRel, ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> docPairCosineMap) throws IOException {
-        Iterator it = unjudged.iterator();
         HashMap<String, Double> estmatedList = new HashMap<String, Double>();
-        double score = 0;
+        double score;
+        double sim, dist;
+        String docidair;
+
         for (String docid : unjudged) {
 
             score = 0;
-            String docidair = "";
-            double sim;
-               
-            if (reldocList.relMap.containsKey(docid) || reldocList.irrelMap.containsKey(docid)) {
-              //  System.out.println(judgedRel.size());
-              //  System.out.println("Qid " + qid);
-                for (String docId2 : judgedRel) {
-                    sim = 0;
-                    try {
-                        docidair = docid + docId2;
+        	for (String docId2 : judgedRel) {
+            	sim = 0;
+                docidair = docid + docId2;
 
-                        sim = 0;
-                        if (docPairCosineMap.containsKey(docidair)) {
-                            sim = docPairCosineMap.get(docidair);
-                           // System.out.println("sim " + sim);
-                        } else {
-                          //  System.out.println(docidair + " " + qid);
-                        }
-                        score += Math.exp(-(((1 - sim)/h) * ((1 - sim)/h)) / 2);
-                    } catch (Exception e) {
-
-                        sim = 0;
-                        score += Math.exp(-((1 - sim) * (1 - sim)) / 2);
-                    }
-                }
-                score = score / judgedRel.size();
-                score = score / (val *h);
-                if(reldocList.relMap.containsKey(docid))
-                { System.out.println("1"); System.out.println("Score " + score);}
-                //else
-                //    System.out.println("0");
-               
-                estmatedList.put(docid, score);
+                sim = docPairCosineMap.get(docidair);
+				dist = 1-sim;
+                score += Math.exp(-((dist*dist/h)/(2*sigma*sigma)));
             }
+            score = score / judgedRel.size();
+            score = score / (val *h);
+               
+            estmatedList.put(docid, score);
         }
         return estmatedList;
     }
