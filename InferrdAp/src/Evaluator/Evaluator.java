@@ -295,11 +295,13 @@ class RetrievedResults implements Comparable<RetrievedResults> {
         pool = new ArrayList<>();
         docIdSimValueMap = new HashMap<>();
         minSimValue = 99999;
+        maxSimValue = -9999999;
     }
 
     void addTuple(String docName, int rank, double simvalue) {
         rtuples.add(new ResultTuple(docName, rank, simvalue));
         docIdSimValueMap.put(docName, simvalue);
+       
         if (maxSimValue < simvalue) {
             maxSimValue = simvalue;
         }
@@ -661,6 +663,50 @@ class InferredApKDE extends InferredAp implements APComputer {
         return estmatedList;
     }
 
+    public HashMap<String, Double> computeWeightedKde(ArrayList<String> unjudged, IndexReader reader, int qid, HashMap<String, Double> docPairCosineMap) throws IOException {
+        HashMap<String, Double> estmatedList = new HashMap<String, Double>();
+        double score;
+        double sim, dist;
+
+        String docidair;
+
+        for (String docid : unjudged) {
+            score = 0;
+            double weightSum = 0;
+            if (reldocList.irrelMap.containsKey(docid) || reldocList.relMap.containsKey(docid)) {
+                int rank = 0;
+                for (ResultTuple rt : retriveList.rtuples) {
+                    String docId2 = rt.docName;
+                    if (sampledData.contains(docId2) && reldocList.relMap.containsKey(docId2)) {
+                        sim = 0;
+                        docidair = docid + docId2;
+                        sim = docPairCosineMap.get(docidair);
+                        dist = 1 - sim;
+                        double weight = 0;
+                        try {
+                            if(retriveList.rtuples.get(rank).simvalue != 0)
+                            weight = 1 / (double) retriveList.rtuples.get(rank).simvalue / retriveList.maxSimValue;
+                         //   System.out.println("hhh");
+                        } catch (NullPointerException np) {
+                            weight = 1 / (double) retriveList.minSimValue / retriveList.maxSimValue;
+                        }
+                      //  System.out.println("Weight " + retriveList.maxSimValue);
+                        //  System.out.println("Weight " + weight);
+                        weightSum += weight;
+                        score += weight * Math.exp(-((dist * dist) / h) / (2 * sigma * sigma));
+                        
+                    }
+                    rank++;
+                }
+                    if(weightSum != 0)
+                        score = score / weightSum;
+                        score = score / (val * h);
+                        estmatedList.put(docid, score);
+            }
+        }
+        return estmatedList;
+    }
+
     public void storeKDE(String fileName) throws IOException {
         FileWriter fw = new FileWriter(new File(fileName));
         BufferedWriter bw = new BufferedWriter(fw);
@@ -721,14 +767,17 @@ class InferredApKDE extends InferredAp implements APComputer {
                 sum += (1 / rank);
                 int count = 0;
                 double probabilitySum = 0;
+
                 for (int j = 0; j < pos; j++) {
                     if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
 
-                        probabilitySum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1)) * KDEValues.get(retriveList.rtuples.get(j).docName);
+                        probabilitySum += (1 / (double) (pos + 1)) * (rankData.get(pos - 1).dValue / (double) (rank))* KDEValues.get(retriveList.rtuples.get(j).docName);// * ((rankData.get(pos - 1).relDocNo + .0001) / (double) (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001));
+
                         count++;
                     } else {
                         if (sampledData.contains(retriveList.rtuples.get(pos).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(pos).docName))) {
-                            probabilitySum += (1 / (double) (j + 1)) * (rankData.get(j).dValue / (double) (j + 1));
+                            probabilitySum += (1 / (double) (pos + 1)) * (rankData.get(pos - 1).dValue / (double) (rank));// * ((rankData.get(pos - 1).relDocNo + .0001) / (double) (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001));
+
                             count++;
                         }
                         if (sampledData.contains(retriveList.rtuples.get(pos).docName) && (reldocList.irrelMap.containsKey(retriveList.rtuples.get(pos).docName))) {
@@ -737,9 +786,11 @@ class InferredApKDE extends InferredAp implements APComputer {
                         }
                     }
                 }
-                if (count != 0) {
-                    sum += probabilitySum / count;
-                }
+                // if (count != 0) {
+                // System.out.println("Sum " + sum);
+                // System.out.println("probabilitySum " + probabilitySum);
+                sum += probabilitySum;/// count;
+                // }
             }
 
         }
@@ -755,6 +806,7 @@ class InferredApKDE extends InferredAp implements APComputer {
         if (numberofRecords == 0) {
             return 0;
         } else {
+            
             return sum / numberofRecords;
         }
     }
@@ -773,6 +825,7 @@ class EvaluateAll extends Evaluator {
     String resultFolderPath;
     String runFileFolderPath;
     String cosineFolderPath;
+    String kdeMode;
 
     public EvaluateAll(Properties prop) throws IOException, Exception {
         super(prop);
@@ -781,6 +834,7 @@ class EvaluateAll extends Evaluator {
         this.resultFolderPath = prop.getProperty("resultFolderLocation");
         this.runFileFolderPath = prop.getProperty("runfileFolderLocation");
         this.cosineFolderPath = prop.getProperty("cosineFolderLocation");
+        this.kdeMode = prop.getProperty("KDEmode");
     }
 
     public void computeMeanAp() throws FileNotFoundException, Exception {
@@ -813,6 +867,22 @@ class EvaluateAll extends Evaluator {
         bw.close();
     }
 
+    public HashMap<String, Double> computeKDEValues(Set<String> relDOc, HashMap<String, Double> cosineMap, int qid, InferredApKDE iapk) throws IOException {
+
+        if (kdeMode.equals("1")) {
+            return iapk.computeKde(relDOc, iapk.retriveList.pool, reader, qid, cosineMap);
+        } else if (kdeMode.equals("2")) {
+
+            return iapk.computeWeightedKde(iapk.retriveList.pool, reader, qid, cosineMap);
+
+        } else if (kdeMode.equals("3")) {
+            return iapk.computeKdeWithRsv(relDOc, iapk.retriveList.pool, reader, qid, cosineMap);
+
+        } else {
+            return null;
+        }
+    }
+
     public void storeRunQid(String fileName) throws IOException, Exception {
         FileReader fr = new FileReader(new File(runFileList));
         BufferedReader br = new BufferedReader(fr);
@@ -824,10 +894,10 @@ class EvaluateAll extends Evaluator {
         }
         br.close();
         HashMap<String, HashMap<Integer, Double>> runQidApMap = new HashMap<>();
-        HashMap<String, Double> qidCosineMap  = new HashMap<>();
+        HashMap<String, Double> qidCosineMap = new HashMap<>();
         for (int pos = startQid; pos <= endQid; pos++) {
             Integer qidValue = pos;
-            InferredApKDE iapk = new InferredApKDE(qidValue.toString(), 5, "", this, reader, .30, h, sigma,cosineFolderPath);
+            InferredApKDE iapk = new InferredApKDE(qidValue.toString(), 5, "", this, reader, .30, h, sigma, cosineFolderPath);
             System.out.println(pos);
             qidCosineMap = iapk.reldocList.perQuerydocCosineSim;
             for (int j = 0; j < runlist.size(); j++) {
@@ -836,15 +906,20 @@ class EvaluateAll extends Evaluator {
                 retRcds.load();
                 Set<String> rel = new HashSet<String>();
                 Iterator it = iapk.sampledData.iterator();
+                HashMap<String, Integer> rankMap = new HashMap<>();
                 while (it.hasNext()) {
                     String st = (String) it.next();
                     if (iapk.reldoc.contains(st)) {
                         rel.add(st);
                     }
                 }
-               iapk.retriveList = this.retRcds.allRetMap.get(qidValue.toString());
-               iapk.KDEValues = iapk.computeKde(rel, iapk.retriveList.pool, this.reader, Integer.parseInt(qidValue.toString()), qidCosineMap );
+
+                iapk.retriveList = this.retRcds.allRetMap.get(qidValue.toString());
+                iapk.KDEValues = computeKDEValues(rel, qidCosineMap, Integer.parseInt(qidValue.toString()), iapk);
+                //  iapk.KDEValues = iapk.computeKde(rel, iapk.retriveList.pool, this.reader, Integer.parseInt(qidValue.toString()), qidCosineMap);
                 double g = iapk.evaluateAP();
+               // System.out.println(runlist.get(j));
+              //  System.out.println(g);
                 HashMap<Integer, Double> qidApMap = runQidApMap.get(runlist.get(j));
                 if (qidApMap == null) {
                     qidApMap = new HashMap<>();
@@ -859,12 +934,12 @@ class EvaluateAll extends Evaluator {
         for (int j = 0; j < runlist.size(); j++) {
             HashMap<Integer, Double> values = runQidApMap.get(runlist.get(j));
             double sum = 0;
-            for (int i = startQid; i < endQid; i++) {
+            for (int i = startQid; i <= endQid; i++) {
                 sum += values.get(i);
             }
             bw.write(runlist.get(j) + " " + sum / (endQid - startQid + 1));
             bw.newLine();
-            System.out.println(sum / (endQid - startQid + 1));
+           System.out.println(sum / (endQid - startQid + 1));
         }
         bw.close();
     }
@@ -940,7 +1015,7 @@ public class Evaluator {
     public APComputer createAPEvaluator(String qid, int maxIter, double percentage) throws Exception {
         APComputer iapk;
         if (flag.equals("1")) {
-            iapk = new InferredApKDE(qid, maxIter, "", this, reader, percentage, h, sigma,cosineSimilarityFile);
+            iapk = new InferredApKDE(qid, maxIter, "", this, reader, percentage, h, sigma, cosineSimilarityFile);
         } else if (flag.equals("2")) {
             iapk = new AveragePrecision(qid, "", this, reader);
         } else {
