@@ -23,6 +23,9 @@ import org.apache.commons.math3.stat.correlation.KendallsCorrelation;
  */
 public class StatCalculator {
 
+    double maxval;
+    double minval;
+
     public HashMap<String, Double> readValues(String firstFileName, String secondFileName) throws FileNotFoundException, IOException {
         HashMap<String, Double> runQidMap = new HashMap<>();
         FileReader firstFileReader = new FileReader(new File(firstFileName));
@@ -36,7 +39,7 @@ public class StatCalculator {
         while (firstFileLine != null) {
             String st1[] = firstFileLine.split(" ");
             String st2[] = secondFileLine.split(" ");
-          //  runQidMap.put(st1[0], (Double.parseDouble(st1[1]) + Double.parseDouble(st2[1])) / 2);
+            //  runQidMap.put(st1[0], (Double.parseDouble(st1[1]) + Double.parseDouble(st2[1])) / 2);
             runQidMap.put(st1[0], (Double.parseDouble(st1[1])));
             firstFileLine = firstBufferReader.readLine();
             secondFileLine = secondBufferReader.readLine();
@@ -117,12 +120,78 @@ public class StatCalculator {
 
     }
 
+    public ArrayList probabilityAnalysis(String filename) throws FileNotFoundException, IOException {
+        FileReader fr = new FileReader(filename);
+        BufferedReader br = new BufferedReader(fr);
+
+        ArrayList ar = new ArrayList();
+
+        String line = br.readLine();
+        double max = Double.parseDouble(line);
+        double min = Double.parseDouble(line);
+
+        while (line != null) {
+            ar.add(Double.parseDouble(line));
+            if (max < Double.parseDouble(line)) {
+                max = Double.parseDouble(line);
+            }
+            if (min > Double.parseDouble(line)) {
+                min = Double.parseDouble(line);
+            }
+            line = br.readLine();
+        }
+        System.out.println("max " + max);
+        System.out.println("min " + min);
+
+        maxval = max;
+        minval = min;
+        return ar;
+    }
+
+    public void histogramCalculator(ArrayList<Double> ar) {
+        double stepSize = (maxval - minval) / 2;
+        int count1 = 0;
+        int count2 = 0;
+        int count3 = 0;
+        int count4 = 0;
+        int count5 = 0;
+        
+        for (int i = 0; i < ar.size(); i++) {
+            if (ar.get(i) <  minval + stepSize) {
+                count1++;
+            } else if (ar.get(i) < minval + 2 * stepSize) {
+                count2++;
+            } 
+            else
+            {
+                count3++;
+            }
+            
+            /*else if (ar.get(i) < 3 * stepSize) {
+                count3++;
+            } else if (ar.get(i) < 4 * stepSize) {
+                count4++;
+            } else {
+                count5++;
+            }*/
+
+        }
+
+        System.out.println("Count1 " + count1);
+        System.out.println("Count2 " + count2);
+        System.out.println("Count3 " + count3);
+        System.out.println("Count4 " + count4);
+        System.out.println("Count5 " + count5);
+
+    }
+
     public static void main(String[] args) throws IOException {
         StatCalculator stc = new StatCalculator();
-        System.out.println(stc.rmsCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/map.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt")));
-       System.out.println(stc.correlationCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/map.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt")));
-      // System.out.println(stc.kendalTauCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/infAp.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt")));
-
+        System.out.println(stc.rmsCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/Ap.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/kde4.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/kde4.txt")));
+          System.out.println(stc.correlationCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/Ap.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/kde4.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/kde4.txt")));
+        // System.out.println(stc.kendalTauCalc(stc.readValuesforAP("/media/procheta/D8CA50B2CA508F1E/TrecData/trec8/fileList.txt", "/home/procheta/Documents/trec_eval.8.1/infAp.txt"), stc.readValues("/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt", "/media/procheta/D8CA50B2CA508F1E/TrecData/infAp.txt")));
+      // ArrayList ar = stc.probabilityAnalysis("/home/procheta/Documents/cr.txt");
+      // stc.histogramCalculator(ar);
     }
 
 }
