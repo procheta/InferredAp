@@ -8,10 +8,13 @@ package Evaluator;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -58,78 +61,109 @@ public class DocVector {
         termsEnum = terms.iterator(null);
         BytesRef term;
         while ((term = termsEnum.next()) != null) {
-
+            //  System.out.println("hhh");
             TermFreq tf = new TermFreq(term.utf8ToString(), (int) termsEnum.totalTermFreq());
             this.termVector.add(tf);
         }
-
+       
     }
 
-    public double cosineSim(DocVector d) {
+    public double cosineSim(DocVector d, IndexReader reader) throws IOException {
         int j = 0;
         double firstsquaredLength = 0;
         double secondsquaredLength = 0;
         double freqSum = 0;
+
         int i = 0;
         while (i < termVector.size()) {
 
-             if(i != termVector.size() && j!= d.termVector.size())
-            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) > 0) {
-                if (j < d.termVector.size()) {
-                    secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
-                    j++;
+            if (i != termVector.size() && j != d.termVector.size()) {
+                if (termVector.get(i).term.compareTo(d.termVector.get(j).term) > 0) {
+                    if (j < d.termVector.size()) {
+                        secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", d.termVector.get(j).term)));
+                        //  System.out.println(reader.docFreq(new Term("words", d.termVector.get(j).term)));
+                        j++;
+                        // System.out.println("hhh");
+                    }
                 }
             }
-             if(i != termVector.size() && j!= d.termVector.size())
-            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) < 0) {
-                if (i < termVector.size()) {
-                    firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
+            if (i != termVector.size() && j != d.termVector.size()) {
+                if (termVector.get(i).term.compareTo(d.termVector.get(j).term) < 0) {
+                    if (i < termVector.size()) {
+                        firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;// * Math.log(reader.numDocs()/reader.docFreq(new Term("words", termVector.get(i).term)));
 
-                    i++;
+                        i++;
+                    }
                 }
             }
-            if(i != termVector.size() && j!= d.termVector.size())
-            if (termVector.get(i).term.compareTo(d.termVector.get(j).term) == 0) {
-                freqSum += d.termVector.get(j).freq * termVector.get(i).freq;
-                if (j < d.termVector.size()) {
-                    secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;
-                    j++;
-                }
-                if (i < termVector.size()) {
-                    firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;
-                    i++;
+            if (i != termVector.size() && j != d.termVector.size()) {
+                if (termVector.get(i).term.compareTo(d.termVector.get(j).term) == 0) {
+                    freqSum += d.termVector.get(j).freq * termVector.get(i).freq;
+                    if (j < d.termVector.size()) {
+                        secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", d.termVector.get(j).term)))* Math.log(reader.numDocs()/reader.docFreq(new Term("words", d.termVector.get(j).term)));
+
+                        j++;
+                    }
+                    if (i < termVector.size()) {
+                        firstsquaredLength = firstsquaredLength + termVector.get(i).freq * termVector.get(i).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", termVector.get(i).term)));
+
+                        i++;
+                    }
                 }
             }
             if (j == d.termVector.size()) {
-               // break;
-                for(int k = i; k < termVector.size();k++)
-                {
-                     firstsquaredLength = firstsquaredLength + termVector.get(k).freq * termVector.get(k).freq;
-                  
+                // break;
+                for (int k = i; k < termVector.size(); k++) {
+                    firstsquaredLength = firstsquaredLength + termVector.get(k).freq * termVector.get(k).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", termVector.get(i).term)));
+
                 }
                 i = termVector.size();
-            }      
+            }
 
-        
-    }
-        if(j < d.termVector.size())
-        {
-             for(int k = j; k < d.termVector.size();k++)
-                {
-                    secondsquaredLength = secondsquaredLength + d.termVector.get(k).freq * d.termVector.get(k).freq;
-                      
-                }
+        }
+        if (j < d.termVector.size()) {
+            for (int k = j; k < d.termVector.size(); k++) {
+                secondsquaredLength = secondsquaredLength + d.termVector.get(k).freq * d.termVector.get(k).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", d.termVector.get(k).term)));
+
+            }
         }
 
-    double f = freqSum / (Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength));
+        double f = freqSum / (Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength));
 
-    if(Double.isNaN (f))
-            {
-                System.out.println((Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength)));
+        if (Double.isNaN(f)) {
+            System.out.println((Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength)));
 
+        }
+        // System.out.println(freqSum/ (Math.sqrt (firstsquaredLength)* Math.sqrt(secondsquaredLength)));
+        return freqSum / (Math.sqrt(firstsquaredLength) * Math.sqrt(secondsquaredLength));
     }
-       // System.out.println(freqSum/ (Math.sqrt (firstsquaredLength)* Math.sqrt(secondsquaredLength)));
-    return freqSum/ (Math.sqrt (firstsquaredLength)* Math.sqrt(secondsquaredLength));
+
+    public HashMap<String, Double> computeCentroid(DocVector[] docArray) {
+
+        int i = 0;
+        HashMap<String, Double> termMap = new HashMap<String, Double>();
+        int[] pointer = new int[docArray.length];
+        String minTerm = "";
+        for (i = 0; i < docArray.length; i++) {
+            for (int j = 0; j < docArray[i].termVector.size(); j++) {
+                String term = docArray[i].termVector.get(j).term;
+                if (termMap.containsKey(term)) {
+                    termMap.put(term, docArray[i].termVector.get(j).freq + termMap.get(term));
+                } else {
+                    termMap.put(term, (double) docArray[i].termVector.get(j).freq);
+
+                }
+            }//*/
+        }
+
+        Iterator it = termMap.keySet().iterator();
+        while (it.hasNext()) {
+            String st = (String) it.next();
+            termMap.put(st, termMap.get(st) / docArray.length);
+        }
+
+        return termMap;
+
     }
 
 }
