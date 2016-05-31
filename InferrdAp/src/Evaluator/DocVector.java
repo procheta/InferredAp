@@ -50,7 +50,7 @@ public class DocVector {
         this.docid = docid;
         this.termVector = new ArrayList<TermFreq>();
         Analyzer analyzer = new KeywordAnalyzer();
-        QueryParser parser = new QueryParser(Version.LUCENE_CURRENT, "id", analyzer);
+        QueryParser parser = new QueryParser("id", analyzer);
         Query query = parser.parse(docid);
         TopDocs topdocs = searcher.search(query, 1);
         int index = topdocs.scoreDocs[0].doc;
@@ -58,7 +58,7 @@ public class DocVector {
         Terms terms = reader.getTermVector(index, "words");
         TermsEnum termsEnum = null;
 
-        termsEnum = terms.iterator(null);
+        termsEnum = terms.iterator();
         BytesRef term;
         while ((term = termsEnum.next()) != null) {
             //  System.out.println("hhh");
