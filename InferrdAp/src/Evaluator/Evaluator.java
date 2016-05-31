@@ -14,6 +14,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1233,7 +1234,8 @@ public class Evaluator {
     String irrelCentroidFileName;
 
     public Evaluator(String qrelsFile, String resFile, String indexPath, String cosineMode, String cosineSimilarityFile, Properties prop) throws IOException {
-        reader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
+       Path p = Paths.get(indexPath);
+        reader = DirectoryReader.open(FSDirectory.open(p));
         this.cosineMode = cosineMode;
         relRcds = new AllRelRcds(qrelsFile, reader, cosineSimilarityFile, cosineMode);
         retRcds = new AllRetrievedResults(resFile);
@@ -1258,7 +1260,8 @@ public class Evaluator {
         String qrelsFile = prop.getProperty("qrels.file");
         String resFile = prop.getProperty("res.file");
         cosineMode = prop.getProperty("cosinemode");
-        reader = DirectoryReader.open(FSDirectory.open(new File(prop.getProperty("index.file"))));
+        Path p = Paths.get(prop.getProperty("index.file"));
+        reader = DirectoryReader.open(FSDirectory.open(p));
         relRcds = new AllRelRcds(qrelsFile, reader, prop.getProperty("cosine.file"), cosineMode);
         retRcds = new AllRetrievedResults(resFile);
         startQid = Integer.parseInt(prop.getProperty("qid.start"));
