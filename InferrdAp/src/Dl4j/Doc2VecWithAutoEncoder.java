@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package Dl4j;
+package dl4jtest;
 
 import com.google.common.collect.HashBiMap;
 import java.io.BufferedReader;
@@ -19,6 +19,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -69,13 +71,22 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
  */
 public class Doc2VecWithAutoEncoder {
 
+    ArrayList<String> docIds;
+    ArrayList<String> labels;
+
+    public Doc2VecWithAutoEncoder() {
+        docIds = new ArrayList<>();
+        labels = new ArrayList<>();
+
+    }
+
     // ++Procheta
-    public ArrayList<String> getDocIds(String qid, String qrelPath) throws FileNotFoundException, IOException {
+    public void getDocIds(String qid, String qrelPath) throws FileNotFoundException, IOException {
         FileReader fr = new FileReader(new File(qrelPath));
         BufferedReader br = new BufferedReader(fr);
         String line = br.readLine();
         int startflag = 0;
-        ArrayList<String> docIds = new ArrayList<String>();
+
         while (line != null) {
             String st[] = line.split(" ");
             if (startflag == 0 && st[0].equals(qid)) {
@@ -83,6 +94,7 @@ public class Doc2VecWithAutoEncoder {
             }
             if (startflag == 1 && st[0].equals(qid)) {
                 docIds.add(st[2]);
+                labels.add(st[3]);
             }
             if (startflag == 1 && !st[0].equals(qid)) {
                 break;
@@ -90,11 +102,9 @@ public class Doc2VecWithAutoEncoder {
             line = br.readLine();
         }
 
-        return docIds;
     }
 
     // ++ Procheta This function will save the output of a layer
-
     public void saveModel(DataSetIterator iter, String outputFilename, MultiLayerNetwork model) throws IOException {
         FileWriter fw = new FileWriter(new File(outputFilename));
         BufferedWriter bw = new BufferedWriter(fw);
@@ -107,13 +117,79 @@ public class Doc2VecWithAutoEncoder {
         bw.close();
     }
 
-    // A small unit test for testing the vectorization
+    //++Procheta
+    public ArrayList<String> subsample(int depth, String filePath, String qid,String folderLocation) throws FileNotFoundException, IOException {
 
+        FileReader fr = new FileReader(new File(filePath));
+        BufferedReader br = new BufferedReader(fr);
+        String line = br.readLine();
+        HashSet<String> docids = new HashSet<String>();
+        while (line != null) {
+
+            FileReader fr2 = new FileReader(new File(folderLocation + line));
+            BufferedReader br2 = new BufferedReader(fr2);
+            String line2 = br2.readLine();
+            int startFlag = 0;
+            int i = 0;
+            while (line2 != null) {
+                String st[] = line2.split("	");
+                if (st[0].equals(qid)) {
+                    startFlag = 1;
+                }
+                if (startFlag == 1 && st[0].equals(qid) && i < depth) {
+                    docids.add(st[2]);
+                    i++;
+                }
+                if (startFlag == 1 && !st[0].equals(qid)) {
+                    break;
+                }
+
+                line2 = br2.readLine();
+            }
+            line = br.readLine();
+
+        }
+
+        ArrayList<String> docs = new ArrayList<>();
+        Iterator it = docids.iterator();
+        while (it.hasNext()) {
+            docs.add((String) it.next());
+        }
+        System.out.println(docids.size());
+        ArrayList<String> sampledDocs = new ArrayList<>();
+        int poolsize = (int) (docids.size() * .80);
+        Random rn = new Random();
+        System.out.println(poolsize);
+        for (int i = 0; i < poolsize; i++) {
+            int num = rn.nextInt(docids.size()) + 1;
+            
+            sampledDocs.add(docs.get(num));
+        }
+        return sampledDocs;
+
+    }
+
+    // +++Procheta 
+    // saving the sampled Docids
+    public void saveSampleDocId(ArrayList docIds, String fileName) throws IOException {
+        FileWriter fw = new FileWriter(new File(fileName));
+        System.out.println(docIds.size());
+        BufferedWriter bw = new BufferedWriter(fw);
+        for (int i = 0; i < docIds.size(); i++) {
+            bw.write((String) docIds.get(i));
+            bw.newLine();
+        }
+        bw.close();
+        fw.close();
+
+    }
+    
+    // A small unit test for testing the vectorization
     public static void main(String[] args) throws FileNotFoundException, IOException {
-        
+
         if (args.length < 1) {
             args = new String[1];
-            args[0] = "/home/procheta/NetBeansProjects/InferrdAp/src/Dl4j/init.properties";
+            args[0] = "/home/procheta/NetBeansProjects/Dl4jTest/src/dl4jtest/init.properties";
         }
         String[] docs = {
             "The cat sat on the mat",
@@ -127,7 +203,7 @@ public class Doc2VecWithAutoEncoder {
         };
 
         try {
-             Properties prop = new Properties();
+            Properties prop = new Properties();
             prop.load(new FileReader(args[0]));
             LuceneDocFetcher luceneDocFetcher;
 
@@ -152,11 +228,15 @@ public class Doc2VecWithAutoEncoder {
             Directory dir = FSDirectory.open(path);
 
             Doc2VecWithAutoEncoder dva = new Doc2VecWithAutoEncoder();
-            ArrayList<String> docIds = dva.getDocIds(prop.getProperty("qid"), prop.getProperty("qrel"));
+            System.out.println(prop.getProperty("depth"));
+           ArrayList<String> docIds;
+            docIds = dva.subsample(Integer.parseInt(prop.getProperty("depth")), prop.getProperty("fileList"), prop.getProperty("qid"), prop.getProperty("folderPath"));
+            dva.getDocIds(prop.getProperty("qid"), prop.getProperty("qrel"));
+            dva.saveSampleDocId(docIds, prop.getProperty("sampleOutput"));
             // pass the in-mem index reader to the vectorizer
-            luceneDocFetcher = new LuceneDocFetcher(dir, docIds);
+           /* luceneDocFetcher = new LuceneDocFetcher(dir, dva.docIds);
             System.out.println("done");
-            DataSetIterator iter = new BaseDatasetIterator(1, docIds.size(), luceneDocFetcher);
+            DataSetIterator iter = new BaseDatasetIterator(1, dva.docIds.size(), luceneDocFetcher);
             while (iter.hasNext()) {
                 DataSet v = iter.next();
 
@@ -194,7 +274,7 @@ public class Doc2VecWithAutoEncoder {
                      .layer(9, new OutputLayer.Builder(LossFunctions.LossFunction.RMSE_XENT).nIn(1000).nOut(vocabSize).build())
                      .pretrain(true).backprop(true)
                      */
-                    .build();
+                 /*   .build();
 
             MultiLayerNetwork model = new MultiLayerNetwork(conf);
             model.init();
@@ -211,7 +291,7 @@ public class Doc2VecWithAutoEncoder {
             }
             //++Procheta
             iter.reset();
-            dva.saveModel(iter, prop.getProperty("output"), model);
+            dva.saveModel(iter, prop.getProperty("output"), model);*/
         } catch (Exception ex) {
             ex.printStackTrace();
         }
