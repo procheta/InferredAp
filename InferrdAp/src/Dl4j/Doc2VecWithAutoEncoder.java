@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
@@ -109,6 +110,11 @@ public class Doc2VecWithAutoEncoder {
     // A small unit test for testing the vectorization
 
     public static void main(String[] args) throws FileNotFoundException, IOException {
+        
+        if (args.length < 1) {
+            args = new String[1];
+            args[0] = "/home/procheta/NetBeansProjects/InferrdAp/src/Dl4j/init.properties";
+        }
         String[] docs = {
             "The cat sat on the mat",
             "The dog sat on the mat",
@@ -121,6 +127,8 @@ public class Doc2VecWithAutoEncoder {
         };
 
         try {
+             Properties prop = new Properties();
+            prop.load(new FileReader(args[0]));
             LuceneDocFetcher luceneDocFetcher;
 
             // test loading a simple collection of docs...
@@ -140,11 +148,11 @@ public class Doc2VecWithAutoEncoder {
                 }
             }
             writer.close();
-            Path path = Paths.get("/media/procheta/3CE80E12E80DCADA/newIndex4");
+            Path path = Paths.get(prop.getProperty("index"));
             Directory dir = FSDirectory.open(path);
 
             Doc2VecWithAutoEncoder dva = new Doc2VecWithAutoEncoder();
-            ArrayList<String> docIds = dva.getDocIds("401", "/media/procheta/D8CA50B2CA508F1E/TrecData/qrel/qrels.trec8.adhoc");
+            ArrayList<String> docIds = dva.getDocIds(prop.getProperty("qid"), prop.getProperty("qrel"));
             // pass the in-mem index reader to the vectorizer
             luceneDocFetcher = new LuceneDocFetcher(dir, docIds);
             System.out.println("done");
@@ -203,7 +211,7 @@ public class Doc2VecWithAutoEncoder {
             }
             //++Procheta
             iter.reset();
-            dva.saveModel(iter, "/home/procheta/Documents/op.txt", model);
+            dva.saveModel(iter, prop.getProperty("output"), model);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
