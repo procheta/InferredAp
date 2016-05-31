@@ -10,6 +10,7 @@ import org.apache.lucene.analysis.Analyzer;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Path;
 import org.xml.sax.*;
 import org.xml.sax.helpers.*;
 import javax.xml.parsers.*;
@@ -17,6 +18,7 @@ import java.util.*;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.StopFilter;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
+import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.index.IndexWriter;
 
 import org.apache.lucene.search.Query;
@@ -67,10 +69,10 @@ public class TRECDocParser extends DefaultHandler {
     }
 
     Analyzer constructAnalyzer() {
-        Analyzer eanalyzer = new EnglishAnalyzer(
-                Version.LUCENE_4_9,
-                StopFilter.makeStopSet(
-                        Version.LUCENE_4_9, buildStopwordList("stopfile"))); // default analyzer
+        Analyzer eanalyzer; 
+       // eanalyzer = new EnglishAnalyzer(Version.LUCENE_5_4_0,StopFilter.makeStopSet(Version.LUCENE_5_4_0, buildStopwordList("stopfile")));
+        eanalyzer = new EnglishAnalyzer(StopFilter.makeStopSet(buildStopwordList("stopfile")));
+        
         return eanalyzer;
     }
 
@@ -80,6 +82,7 @@ public class TRECDocParser extends DefaultHandler {
         analyzer = constructAnalyzer();
         String indexPath = prop.getProperty("index");
         indexDir = new File(indexPath);
+        System.out.println(indexPath);
     }
 
     public Analyzer getAnalyzer() {
@@ -93,10 +96,11 @@ public class TRECDocParser extends DefaultHandler {
     void processAll() throws Exception {
         System.out.println("Indexing TREC collection...");
 
-        IndexWriterConfig iwcfg = new IndexWriterConfig(Version.LUCENE_4_9, analyzer);
+        IndexWriterConfig iwcfg = new IndexWriterConfig(analyzer);
         iwcfg.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
+        Path p = indexDir.toPath();
 
-        writer = new IndexWriter(FSDirectory.open(indexDir), iwcfg);
+        writer = new IndexWriter(FSDirectory.open(p), iwcfg);
 
         indexAll();
 
