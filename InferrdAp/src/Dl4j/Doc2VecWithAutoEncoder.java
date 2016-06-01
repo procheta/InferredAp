@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package dl4jtest;
+package Dl4j;
 
 import com.google.common.collect.HashBiMap;
 import java.io.BufferedReader;
@@ -230,13 +230,14 @@ public class Doc2VecWithAutoEncoder {
             Doc2VecWithAutoEncoder dva = new Doc2VecWithAutoEncoder();
             System.out.println(prop.getProperty("depth"));
            ArrayList<String> docIds;
-            docIds = dva.subsample(Integer.parseInt(prop.getProperty("depth")), prop.getProperty("fileList"), prop.getProperty("qid"), prop.getProperty("folderPath"));
-            dva.getDocIds(prop.getProperty("qid"), prop.getProperty("qrel"));
-            dva.saveSampleDocId(docIds, prop.getProperty("sampleOutput"));
+           dva.getDocIds(prop.getProperty("qid"), prop.getProperty("qrel"));
+            //   docIds = dva.subsample(Integer.parseInt(prop.getProperty("depth")), prop.getProperty("fileList"), prop.getProperty("qid"), prop.getProperty("folderPath"));
+            //  dva.saveSampleDocId(docIds, prop.getProperty("sampleOutput"));
             // pass the in-mem index reader to the vectorizer
-           /* luceneDocFetcher = new LuceneDocFetcher(dir, dva.docIds);
-            System.out.println("done");
-            DataSetIterator iter = new BaseDatasetIterator(1, dva.docIds.size(), luceneDocFetcher);
+          //  luceneDocFetcher = new LuceneDocFetcher(dir, dva.docIds);
+            luceneDocFetcher = new LuceneDocFetcher(dir, dva.docIds,dva.labels);
+           
+            DataSetIterator iter = new BaseDatasetIterator(1, 50, luceneDocFetcher);
             while (iter.hasNext()) {
                 DataSet v = iter.next();
 
@@ -274,7 +275,7 @@ public class Doc2VecWithAutoEncoder {
                      .layer(9, new OutputLayer.Builder(LossFunctions.LossFunction.RMSE_XENT).nIn(1000).nOut(vocabSize).build())
                      .pretrain(true).backprop(true)
                      */
-                 /*   .build();
+                    .build();
 
             MultiLayerNetwork model = new MultiLayerNetwork(conf);
             model.init();
@@ -291,7 +292,7 @@ public class Doc2VecWithAutoEncoder {
             }
             //++Procheta
             iter.reset();
-            dva.saveModel(iter, prop.getProperty("output"), model);*/
+            dva.saveModel(iter, prop.getProperty("output"), model);//*/
         } catch (Exception ex) {
             ex.printStackTrace();
         }
