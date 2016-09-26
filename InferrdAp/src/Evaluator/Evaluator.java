@@ -48,8 +48,9 @@ class PerQueryRelDocs {
     String qid;
     HashMap<String, Integer> relMap; // keyed by docid, entry stores the rel value
     HashMap<String, Integer> irrelMap; // keyed by docid, entry stores the irrel value
-    HashMap<String, Double> relCentroid;
-    HashMap<String, Double> irrelCentroid;
+    ArrayList<Double> relCentroid;
+    ArrayList<Double> irrelCentroid;
+    HashMap<String, ArrayList<Double>> vectorMap; // keyed by docid, vector
     ArrayList<String> pool; // list of all the  judged docs
     int numRel;
     HashMap<String, Double> perQuerydocCosineSim;
@@ -65,9 +66,11 @@ class PerQueryRelDocs {
         this.reader = reader;
         searcher = new IndexSearcher(reader);
         perQuerydocCosineSim = new HashMap<>();
-        relCentroid = new HashMap<>();
-        irrelCentroid = new HashMap<>();
-        precomputeCosineSim();
+        relCentroid = new ArrayList<Double>(300);
+        irrelCentroid = new ArrayList<Double>(300);
+        vectorMap = new HashMap<>();
+        HashMap<String, ArrayList<Double>> h = null;
+        precomputeCosineSim(h);
     }
 
     public PerQueryRelDocs(String qid, IndexReader reader) throws IOException, ParseException {
@@ -77,39 +80,64 @@ class PerQueryRelDocs {
         irrelMap = new HashMap<>();
         pool = new ArrayList<>();
         this.reader = reader;
-        searcher = new IndexSearcher(reader);
-        relCentroid = new HashMap<>();
-        irrelCentroid = new HashMap<>();
+         searcher = new IndexSearcher(reader);
+        relCentroid = new ArrayList<Double>(30);
+        irrelCentroid = new ArrayList<Double>(300);
         perQuerydocCosineSim = new HashMap<>();
+        vectorMap = new HashMap<>();
     }
 
-    void addTuple(String docId, int rel) {
+    void addTuple(String docId, int rel, ArrayList<Double> ar) {
         if (relMap.get(docId) != null) {
             return;
         }
         if (rel > 0) {
             numRel++;
             relMap.put(docId, rel);
+            for (int i = 0; i < ar.size(); i++) {
+               try {
+                    relCentroid.set(i, relCentroid.get(i) + ar.get(i));
+                } catch (Exception e) {
+                    relCentroid.add(ar.get(i));
+                }
+
+            }
             pool.add(docId);
         }
         if (rel == 0) {
             irrelMap.put(docId, rel);
+            for (int i = 0; i < ar.size(); i++) {
+                try {
+                    irrelCentroid.set(i, irrelCentroid.get(i) + ar.get(i));
+                } catch (Exception e) {
+                    irrelCentroid.add(ar.get(i));
+                }
+
+            }
             pool.add(docId);
         }
+        vectorMap.put(docId, ar);
+
     }
 
-    public void precomputeCosineSim() throws IOException, ParseException {
+    public void precomputeCosineSim(HashMap<String, ArrayList<Double>> h) throws IOException, ParseException {
         Iterator it = irrelMap.keySet().iterator();
+
         while (it.hasNext()) {
             String irrelDocId = (String) it.next();
             DocVector firstDoc = new DocVector(irrelDocId, reader, searcher);
+            firstDoc.vector = h.get(irrelDocId);
             Iterator it2 = relMap.keySet().iterator();
             while (it2.hasNext()) {
-                String secondDocName = (String) it2.next();
 
+                String secondDocName = (String) it2.next();
+                // DocVector secondDoc = new DocVector(secondDocName, reader, searcher);
                 DocVector secondDoc = new DocVector(secondDocName, reader, searcher);
-                perQuerydocCosineSim.put(irrelDocId + "#" + secondDocName, firstDoc.cosineSim(secondDoc, reader));
-           }
+                secondDoc.vector = h.get(secondDocName);
+                //  perQuerydocCosineSim.put(irrelDocId + "#" + secondDocName, firstDoc.cosineSim(secondDoc, reader));
+                perQuerydocCosineSim.put(irrelDocId + "#" + secondDocName, firstDoc.computeCosineSim(secondDoc));
+                System.out.println(firstDoc.computeCosineSim(secondDoc));
+            }
 
         }
         it = relMap.keySet().iterator();
@@ -145,99 +173,123 @@ class AllRelRcds {
         this.cosineMode = mode;
     }
 
-    public void loadCentroid(String relFileName, String irrelFileName) throws FileNotFoundException, IOException {
-        HashMap<String, Double> termMap = new HashMap<>();
-        FileReader fr = new FileReader(new File(relFileName));
-        BufferedReader br = new BufferedReader(fr);
-        String line = br.readLine();
-        int flag = 0;
-        String qid = "";
-        while (line != null) {
-            if (line.startsWith("#")) {
-                if (flag == 1) {
-                    perQueryRels.get(qid).relCentroid = termMap;
-                }
-                qid = line.substring(1, line.length());
+    /* public void loadCentroid(String relFileName, String irrelFileName) throws FileNotFoundException, IOException {
+     HashMap<String, Double> termMap = new HashMap<>();
+     FileReader fr = new FileReader(new File(relFileName));
+     BufferedReader br = new BufferedReader(fr);
+     String line = br.readLine();
+     int flag = 0;
+     String qid = "";
+     while (line != null) {
+     if (line.startsWith("#")) {
+     if (flag == 1) {
+     perQueryRels.get(qid).relCentroid = termMap;
+     }
+     qid = line.substring(1, line.length());
 
-                termMap = new HashMap<>();
-            } else {
-                flag = 1;
-                String st[] = line.split(" ");
-                termMap.put(st[0], Double.parseDouble(st[1]));
-            }
-            line = br.readLine();
-        }
-        perQueryRels.get(qid).relCentroid = termMap;
-        fr = new FileReader(new File(irrelFileName));
-        br = new BufferedReader(fr);
-        line = br.readLine();
-        flag = 0;
-        termMap = new HashMap<>();
-        while (line != null) {
-            if (line.startsWith("#")) {
+     termMap = new HashMap<>();
+     } else {
+     flag = 1;
+     String st[] = line.split(" ");
+     termMap.put(st[0], Double.parseDouble(st[1]));
+     }
+     line = br.readLine();
+     }
+     perQueryRels.get(qid).relCentroid = termMap;
+     fr = new FileReader(new File(irrelFileName));
+     br = new BufferedReader(fr);
+     line = br.readLine();
+     flag = 0;
+     termMap = new HashMap<>();
+     while (line != null) {
+     if (line.startsWith("#")) {
 
-                if (flag == 1) {
-                    perQueryRels.get(qid).irrelCentroid = termMap;
+     if (flag == 1) {
+     perQueryRels.get(qid).irrelCentroid = termMap;
 
-                }
-                qid = line.substring(1, line.length());
-                termMap = new HashMap<>();
-            } else {
-                flag = 1;
-                String st[] = line.split(" ");
-                termMap.put(st[0], Double.parseDouble(st[1]));
-            }
-            line = br.readLine();
-        }
-        perQueryRels.get(qid).irrelCentroid = termMap;
+     }
+     qid = line.substring(1, line.length());
+     termMap = new HashMap<>();
+     } else {
+     flag = 1;
+     String st[] = line.split(" ");
+     termMap.put(st[0], Double.parseDouble(st[1]));
+     }
+     line = br.readLine();
+     }
+     perQueryRels.get(qid).irrelCentroid = termMap;
 
-    }
-
-    void load(int startQid, int endQid, String relFileName, String irrelFileName) throws Exception {
+     }*/
+    void load(int startQid, int endQid, String relFileName, String irrelFileName, String vectorFolderLocation) throws Exception {
         FileReader fr = new FileReader(qrelsFile);
         BufferedReader br = new BufferedReader(fr);
+
+        FileReader fr1 = new FileReader(vectorFolderLocation + startQid + ".txt");
+        BufferedReader br1 = new BufferedReader(fr1);
+        String line1;
         String line;
-
-        while ((line = br.readLine()) != null) {
-            storeRelRcd(line);
+        line = br.readLine();
+        while ((line1 = br1.readLine()) != null) {
+            storeRelRcd(line, line1);
+            line = br.readLine();
         }
-
+        Integer d = startQid;
+        PerQueryRelDocs reldoc = perQueryRels.get(d.toString());
+       // System.out.println(reldoc);
+        for (int i = 0; i < reldoc.relCentroid.size(); i++) {
+            reldoc.relCentroid.set(i, reldoc.relCentroid.get(i) / reldoc.relMap.size());
+        }
         br.close();
         fr.close();
 
-        loadCentroid(relFileName, irrelFileName);
+       // loadCentroid(relFileName, irrelFileName);
         //cosinefile load or store
         //   if (mode.equals("load")) {
         // loadCosineValue(cosineFile, startQid, endQid);
         //  } else
+        // System.out.println("pppp");
         if (cosineMode.equals("store")) {
-            storeCosineSimilarity(cosineFile, startQid, endQid);
-            
+            // System.out.println("mmmmmm");
+            storeCosineSimilarity(cosineFile, startQid, endQid, vectorFolderLocation);
+
         }
     }
 
-    void storeRelRcd(String line) throws IOException, ParseException {
+    void storeRelRcd(String line, String line1) throws IOException, ParseException {
         String[] tokens = line.split("\\s+");
+        VectorExtractor ve = new VectorExtractor();
+        // System.out.println(line1);
+        ArrayList vector = ve.getVector(line1);
         String qid = tokens[0];
+        //  System.out.println(vector);
         PerQueryRelDocs relTuple = perQueryRels.get(qid);
         if (relTuple == null) {
             relTuple = new PerQueryRelDocs(qid, reader);
+            // relTuple.relCentroid.set(0, Double.NaN);
             perQueryRels.put(qid, relTuple);
+
         }
-        relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]));
+
+        relTuple.addTuple(tokens[2], Integer.parseInt(tokens[3]), vector);
     }
 
-    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo) throws IOException, ParseException {
+    public void storeCosineSimilarity(String fileName, int startQrelNo, int endQrelNo, String vectorFolderLocation) throws IOException, ParseException {
         FileWriter fw = new FileWriter(new File(fileName), true);
         BufferedWriter bw = new BufferedWriter(fw);
         bw.newLine();
+        VectorExtractor ve = new VectorExtractor();
+
         for (int qid = startQrelNo; qid <= endQrelNo; qid++) {
             Integer qidValue = qid;
             PerQueryRelDocs perqd = perQueryRels.get(qidValue.toString());
-            perqd.precomputeCosineSim();
+            System.out.println(vectorFolderLocation);
+            System.out.println(qid);
+            HashMap<String, ArrayList<Double>> h = ve.extractVector(vectorFolderLocation + qid + ".txt");
+            perqd.precomputeCosineSim(h);
             bw.write("#" + qidValue.toString());
             bw.newLine();
             Iterator it = perqd.perQuerydocCosineSim.keySet().iterator();
+
             while (it.hasNext()) {
                 String docPair = (String) it.next();
                 String st[] = docPair.split("#");
@@ -623,7 +675,9 @@ class InferredAp extends AveragePrecision implements APComputer {
         }
 
     }
+
     // Function to create doc array for rel docs within sample
+
     public DocVector[] creatRelDocArray() throws IOException, ParseException {
         Iterator it = sampledData.iterator();
         int index = 0;
@@ -647,7 +701,9 @@ class InferredAp extends AveragePrecision implements APComputer {
         }
         return docArray;
     }
+
     // Function to create doc array for irrel docs within sample
+
     public DocVector[] creatIrelDocArray() throws IOException, ParseException {
         Iterator it = sampledData.iterator();
         int index = 0;
@@ -738,7 +794,7 @@ class InferredApKDE extends InferredAp implements APComputer {
     public InferredApKDE(String qrelString, int maxIter, String run, Evaluator eval, IndexReader reader, double percentage, double h, double sigma, String cosineFolderPath, double lambda, IndexSearcher searcher) throws IOException {
         super(qrelString, maxIter, run, eval, reader, percentage);
         this.cosineFolderPath = cosineFolderPath;
-        loadCosineValuePerQid();
+        // loadCosineValuePerQid();
         this.h = h;
         this.sigma = sigma;
         this.lambda = lambda;
@@ -755,8 +811,8 @@ class InferredApKDE extends InferredAp implements APComputer {
          }
          computeKde(rel, retriveList.pool, reader, Integer.parseInt(qrelString), reldocList.perQuerydocCosineSim);
          */
-         /*DocVector[] docArray;
-       try {
+        /*DocVector[] docArray;
+         try {
          // docArray = creatIrelDocArray();
          // System.out.println(docArray.length);
          //  System.out.println(docArray[0].docid);
@@ -769,7 +825,9 @@ class InferredApKDE extends InferredAp implements APComputer {
          }*/
 
     }
-     //store the centroid vector
+
+    //store the centroid vector
+
     public void writeCentroid(HashMap<String, Double> termMap, String fileName) throws IOException {
         FileWriter fw = new FileWriter(new File(fileName), true);
         BufferedWriter bw = new BufferedWriter(fw);
@@ -782,11 +840,12 @@ class InferredApKDE extends InferredAp implements APComputer {
             bw.write(st + " " + termMap.get(st));
             bw.newLine();
         }
-
         bw.close();
         fw.close();
     }
-   //compute probabities using similarity with the centroid vectors
+
+    //compute probabities using similarity with the centroid vectors
+
     public void computeprob(ArrayList<String> unjudged) throws IOException, ParseException {
         for (String docid : unjudged) {
             double score = 0;
@@ -794,13 +853,15 @@ class InferredApKDE extends InferredAp implements APComputer {
             int index = 0;
             if (reldocList.irrelMap.containsKey(docid) || reldocList.relMap.containsKey(docid)) {
                 double dist1 = computeRelSim(docid);
+                
                 double dist2 = computeIrrelSim(docid);
                 probValues.put(docid, dist1 / dist2);
-               /* if (reldocList.irrelMap.containsKey(docid)) {
-                    System.out.println(docid + " " + "0 " + dist1 + " " + dist2 + " " + dist1 / dist2);
-                } else {
-                    System.out.println(docid + " " + "1 " + dist1 + " " + dist2 + " " + dist1 / dist2);
-                }*/
+                System.out.println(dist2);
+                /* if (reldocList.irrelMap.containsKey(docid)) {
+                 System.out.println(docid + " " + "0 " + dist1 + " " + dist2 + " " + dist1 / dist2);
+                 } else {
+                 System.out.println(docid + " " + "1 " + dist1 + " " + dist2 + " " + dist1 / dist2);
+                 }*/
 
             }
         }
@@ -841,7 +902,6 @@ class InferredApKDE extends InferredAp implements APComputer {
                     docidair = docid + docId2;
                     sim = docPairCosineMap.get(docidair);
                     ar.add(sim);
-
                     dist = 1 - sim;
                     score += Math.exp(-((dist * dist) / h) / (2 * sigma * sigma));
                 }
@@ -912,7 +972,6 @@ class InferredApKDE extends InferredAp implements APComputer {
                     sim = 0;
                     if (retriveList.docIdSimValueMap.containsKey(docId2)) {
                         dist = (retriveList.docIdSimValueMap.get(docid) - retriveList.docIdSimValueMap.get(docId2)) / (retriveList.maxSimValue - retriveList.minSimValue);
-
                     } else {
                         dist = (retriveList.docIdSimValueMap.get(docid) - retriveList.minSimValue) / (retriveList.maxSimValue - retriveList.minSimValue);
                     }
@@ -928,30 +987,41 @@ class InferredApKDE extends InferredAp implements APComputer {
         }
         return estmatedList;
     }
-   //compute similarity with rel docs
+
+    //compute similarity with rel docs
+
     public double computeRelSim(String docid) throws IOException, ParseException {
 
-        DocVector d = new DocVector(docid, reader, searcher);
+        DocVector d = new DocVector(docid, reader, searcher, "/home/procheta/vecs/srbm.outvecs.train.401.txt");
         double dist = 0;
         double dist1 = 0;
         double dist2 = 0;
-        for (int i = 0; i < d.termVector.size(); i++) {
-            if (reldocList.relCentroid.containsKey(d.termVector.get(i).term)) {
-                dist += (d.termVector.get(i).freq * reldocList.relCentroid.get(d.termVector.get(i).term));
-            }
-            dist1 += d.termVector.get(i).freq * d.termVector.get(i).freq;
+        ArrayList<Double> ar = reldocList.vectorMap.get(docid);
+        VectorExtractor ve = new VectorExtractor();
+      //  System.out.println(reldocList.);
 
-        }
+        /*  for (int i = 0; i < d.termVector.size(); i++) {
+         if (reldocList.relCentroid.containsKey(d.termVector.get(i).term)) {
+         dist += (d.termVector.get(i).freq * reldocList.relCentroid.get(d.termVector.get(i).term));
+         }
+         dist1 += d.termVector.get(i).freq * d.termVector.get(i).freq;
 
-        Iterator it = reldocList.relCentroid.keySet().iterator();
-        while (it.hasNext()) {
-            String st = (String) it.next();
-            dist2 += reldocList.relCentroid.get(st) * reldocList.relCentroid.get(st);
-        }
+         }
 
-        dist = dist / (Math.sqrt(dist1) * Math.sqrt(dist2));
-
-        return dist;
+        
+         ArrayList<Double> ar = new ArrayList<Double>();
+         Iterator it = reldocList.relCentroid.keySet().iterator();
+         while (it.hasNext()) {
+         String st = (String) it.next();
+         dist2 += reldocList.relCentroid.get(st) * reldocList.relCentroid.get(st);
+         ar.add(reldocList.relCentroid.get(st));
+         }
+         */
+     //   System.out.println(ar);
+        double sim = ve.computeSimilarity(reldocList.relCentroid, ar);
+        //   dist = dist / (Math.sqrt(dist1) * Math.sqrt(dist2));
+      
+        return sim;
     }
 
     public double computeIrrelSim(String docid) throws IOException, ParseException {
@@ -961,23 +1031,25 @@ class InferredApKDE extends InferredAp implements APComputer {
         double dist1 = 0;
         double dist2 = 0;
 
-        for (int i = 0; i < d.termVector.size(); i++) {
-            if (reldocList.irrelCentroid.containsKey(d.termVector.get(i).term)) {
-                dist += (d.termVector.get(i).freq * reldocList.irrelCentroid.get(d.termVector.get(i).term));
+        /*  for (int i = 0; i < d.termVector.size(); i++) {
+         if (reldocList.irrelCentroid.containsKey(d.termVector.get(i).term)) {
+         dist += (d.termVector.get(i).freq * reldocList.irrelCentroid.get(d.termVector.get(i).term));
+         }
+         dist1 += d.termVector.get(i).freq * d.termVector.get(i).freq;
+         }
 
-            }
-            dist1 += d.termVector.get(i).freq * d.termVector.get(i).freq;
+         Iterator it = reldocList.irrelCentroid.keySet().iterator();
+         while (it.hasNext()) {
+         String st = (String) it.next();
+         dist2 += reldocList.irrelCentroid.get(st) * reldocList.irrelCentroid.get(st);
+         }
+         dist = dist / (Math.sqrt(dist1) * Math.sqrt(dist2));*/
+        ArrayList<Double> ar = reldocList.vectorMap.get(docid);
+        VectorExtractor ve = new VectorExtractor();
 
-        }
+        double sim = ve.computeSimilarity(reldocList.irrelCentroid, ar);
 
-        Iterator it = reldocList.irrelCentroid.keySet().iterator();
-        while (it.hasNext()) {
-            String st = (String) it.next();
-            dist2 += reldocList.irrelCentroid.get(st) * reldocList.irrelCentroid.get(st);
-        }
-        dist = dist / (Math.sqrt(dist1) * Math.sqrt(dist2));
-
-        return dist;
+        return sim;
     }
 
     @Override
@@ -992,12 +1064,10 @@ class InferredApKDE extends InferredAp implements APComputer {
             double rank = pos + 1;
             if (sampledData.contains(retriveList.rtuples.get(pos).docName) && (reldocList.relMap.containsKey(retriveList.rtuples.get(pos).docName))) {
                 sum += (1 / rank);
-
                 double probabilitySum = 0;
                 for (int j = 0; j < pos; j++) {
                     if (!sampledData.contains(retriveList.rtuples.get(j).docName) && ((reldocList.relMap.containsKey(retriveList.rtuples.get(j).docName)) || (reldocList.irrelMap.containsKey(retriveList.rtuples.get(j).docName)))) {
                         try {
-                            //  probabilitySum += computeDistance(retriveList.rtuples.get(j).docName);
                             probabilitySum += probValues.get(retriveList.rtuples.get(j).docName);
 
                         } catch (Exception ex) {
@@ -1008,7 +1078,7 @@ class InferredApKDE extends InferredAp implements APComputer {
                     }
                 }
                 if (pos != 0) {
-                    sum += (1 / (double) rank) * ((rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo) * ((rankData.get(pos - 1).relDocNo + .0001) / (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001)) + (lambda * (rankData.get(pos - 1).relDocNo + .0001) * (rankData.get(pos - 1).dValue - rankData.get(pos - 1).irrelDocNo - rankData.get(pos - 1).relDocNo) / (double) (rankData.get(pos - 1).irrelDocNo + rankData.get(pos - 1).relDocNo + 2 * .0001)) + ((1 - lambda) * probabilitySum));/// (double)(pos))* probabilitySum) + ((rankData.get(pos - 1).relDocNo + .0001) / (double) (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001) ) * (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001)/(pos));/// count;
+                    sum += (1 / (double) rank) * ((rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo) * ((rankData.get(pos - 1).relDocNo + .0001) / (rankData.get(pos - 1).relDocNo + rankData.get(pos - 1).irrelDocNo + 2 * .0001)) + (lambda * (rankData.get(pos - 1).relDocNo + .0001) * (rankData.get(pos - 1).dValue - rankData.get(pos - 1).irrelDocNo - rankData.get(pos - 1).relDocNo) / (double) (rankData.get(pos - 1).irrelDocNo + rankData.get(pos - 1).relDocNo + 2 * .0001)) + ((1 - lambda) * probabilitySum));
                 }
             }
 
@@ -1145,7 +1215,20 @@ class EvaluateAll extends Evaluator {
         return docrankMap;
     }
 
+    public void computeCosineValues(String fileName) throws IOException {
+        HashMap<String, HashMap<String, ArrayList<Double>>> cosineMap = new HashMap<String, HashMap<String, ArrayList<Double>>>();
+
+        VectorExtractor ve = new VectorExtractor();
+        for (int i = startQid; i <= endQid; i++) {
+            HashMap<String, ArrayList<Double>> h = ve.extractVector(fileName);
+            Integer id = i;
+            cosineMap.put(id.toString(), h);
+
+        }
+    }
+
     public void storeRunQid(String fileName) throws IOException, Exception {
+
         FileReader fr = new FileReader(new File(runFileList));
         BufferedReader br = new BufferedReader(fr);
         String line = br.readLine();
@@ -1180,12 +1263,15 @@ class EvaluateAll extends Evaluator {
                         rel.add(st);
                     }
                 }
-
+                
                 iapk.retriveList = this.retRcds.allRetMap.get(qidValue.toString());
                 iapk.processRetrievedResult();
+               
                 iapk.computeprob(iapk.retriveList.pool);
+                 System.out.println("mmmm");
                 // iapk.KDEValues = computeKDEValues(rel, qidCosineMap, Integer.parseInt(qidValue.toString()), iapk, docRankMap);
                 double g = iapk.evaluateAP();
+                System.out.println("kk"+g);
                 HashMap<Integer, Double> qidApMap = runQidApMap.get(runlist.get(j));
                 if (qidApMap == null) {
                     qidApMap = new HashMap<>();
@@ -1209,7 +1295,6 @@ class EvaluateAll extends Evaluator {
         }
         bw.close();
     }
-
 }
 
 public class Evaluator {
@@ -1232,9 +1317,10 @@ public class Evaluator {
     double lambda;
     String relCentroidFileName;
     String irrelCentroidFileName;
+    String vectorFolderLocation;
 
     public Evaluator(String qrelsFile, String resFile, String indexPath, String cosineMode, String cosineSimilarityFile, Properties prop) throws IOException {
-       Path p = Paths.get(indexPath);
+        Path p = Paths.get(indexPath);
         reader = DirectoryReader.open(FSDirectory.open(p));
         this.cosineMode = cosineMode;
         relRcds = new AllRelRcds(qrelsFile, reader, cosineSimilarityFile, cosineMode);
@@ -1254,6 +1340,7 @@ public class Evaluator {
         this.samplingFileName = prop.getProperty("samplingFileName");
         this.relCentroidFileName = prop.getProperty("centroidFile");
         this.irrelCentroidFileName = prop.getProperty("irrelcentroidFile");
+        this.vectorFolderLocation = prop.getProperty("outputVectorfileLocation");
     }
 
     public Evaluator(Properties prop) throws Exception {
@@ -1281,13 +1368,14 @@ public class Evaluator {
         this.prop = prop;
         this.relCentroidFileName = prop.getProperty("centroidFile");
         this.irrelCentroidFileName = prop.getProperty("irrelcentroidFile");
-
+        this.vectorFolderLocation = prop.getProperty("outputVectorfileLocation");
     }
 
     public void load() throws Exception {
-        relRcds.load(startQid, endQid, relCentroidFileName, irrelCentroidFileName);
+        relRcds.load(startQid, endQid, relCentroidFileName, irrelCentroidFileName, vectorFolderLocation);
+        System.out.println("rel records loaded");
         retRcds.load();
-
+        System.out.println("ret records loaded");
     }
 
     public APComputer createAPEvaluator(String qid, int maxIter, double percentage) throws Exception {
@@ -1300,7 +1388,6 @@ public class Evaluator {
             iapk = new InferredAp(qid, maxIter, "", this, reader, percentage);
 
         }
-
         return iapk;
 
     }
@@ -1319,7 +1406,6 @@ public class Evaluator {
 
         }
         sum /= (endQid - startQid + 1);
-
         reader.close();
         return sum;
     }
@@ -1332,9 +1418,7 @@ public class Evaluator {
             String qid = (String) it.next();
             bw.write(qid + " " + qidApMap.get(qid));
             bw.newLine();
-
         }
-
         bw.close();
     }
 
@@ -1364,5 +1448,4 @@ public class Evaluator {
         }
 
     }
-
 }

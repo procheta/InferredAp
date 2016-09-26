@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.index.DirectoryReader;
@@ -45,6 +46,31 @@ public class DocVector {
 
     String docid;
     public ArrayList<TermFreq> termVector;
+    public ArrayList<Double> vector;
+
+    public DocVector(String docid, IndexReader reader, IndexSearcher searcher, String fileName) throws IOException, ParseException {
+        this.docid = docid;
+        this.termVector = new ArrayList<TermFreq>();
+        Analyzer analyzer = new KeywordAnalyzer();
+        QueryParser parser = new QueryParser("id", analyzer);
+        Query query = parser.parse(docid);
+        TopDocs topdocs = searcher.search(query, 1);
+        int index = topdocs.scoreDocs[0].doc;
+        VectorExtractor ve = new VectorExtractor();
+        HashMap<String, ArrayList<Double>> h1 = ve.extractVector(fileName);
+        vector = h1.get(docid);
+
+        Terms terms = reader.getTermVector(index, "words");
+        TermsEnum termsEnum = null;
+
+        termsEnum = terms.iterator();
+        BytesRef term;
+        while ((term = termsEnum.next()) != null) {
+            TermFreq tf = new TermFreq(term.utf8ToString(), (int) termsEnum.totalTermFreq());
+            this.termVector.add(tf);
+        }
+
+    }
 
     public DocVector(String docid, IndexReader reader, IndexSearcher searcher) throws IOException, ParseException {
         this.docid = docid;
@@ -57,17 +83,27 @@ public class DocVector {
 
         Terms terms = reader.getTermVector(index, "words");
         TermsEnum termsEnum = null;
-
         termsEnum = terms.iterator();
         BytesRef term;
         while ((term = termsEnum.next()) != null) {
-            //  System.out.println("hhh");
             TermFreq tf = new TermFreq(term.utf8ToString(), (int) termsEnum.totalTermFreq());
             this.termVector.add(tf);
         }
-       
-    }
 
+    }
+    
+    public double computeCosineSim(DocVector d)
+    {
+        double similarity = 0;
+        double sum1 = 0;
+        double sum2 = 0;
+        for (int i = 0; i < d.vector.size(); i++) {
+            similarity += (d.vector.get(i) * vector.get(i)) ;
+            sum1 += d.vector.get(i)*d.vector.get(i);
+            sum2 += vector.get(i) * vector.get(i);
+        }
+        return (similarity/(Math.sqrt(sum1)*Math.sqrt(sum2)));
+    }
     public double cosineSim(DocVector d, IndexReader reader) throws IOException {
         int j = 0;
         double firstsquaredLength = 0;
@@ -81,9 +117,7 @@ public class DocVector {
                 if (termVector.get(i).term.compareTo(d.termVector.get(j).term) > 0) {
                     if (j < d.termVector.size()) {
                         secondsquaredLength = secondsquaredLength + d.termVector.get(j).freq * d.termVector.get(j).freq;//* Math.log(reader.numDocs()/reader.docFreq(new Term("words", d.termVector.get(j).term)));
-                        //  System.out.println(reader.docFreq(new Term("words", d.termVector.get(j).term)));
                         j++;
-                        // System.out.println("hhh");
                     }
                 }
             }
@@ -151,11 +185,9 @@ public class DocVector {
                     termMap.put(term, docArray[i].termVector.get(j).freq + termMap.get(term));
                 } else {
                     termMap.put(term, (double) docArray[i].termVector.get(j).freq);
-
                 }
             }//*/
         }
-
         Iterator it = termMap.keySet().iterator();
         while (it.hasNext()) {
             String st = (String) it.next();
@@ -163,7 +195,6 @@ public class DocVector {
         }
 
         return termMap;
-
     }
 
 }
